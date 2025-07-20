@@ -585,7 +585,7 @@
                   </div>
                   <div class="config-item">
                     <span class="config-label">选择的分析师:</span>
-                    <span class="config-value">{{ analysisForm.selectedAnalysts.join(', ') }}</span>
+                    <span class="config-value">{{ getSelectedAnalystsNames() }}</span>
                   </div>
                   <div class="config-item">
                     <span class="config-label">研究深度:</span>
