@@ -665,75 +665,54 @@
               </div>
             </el-tab-pane>
           </el-tabs>
-        </el-card>
-      </div>
 
-      <!-- 重要风险提示和导出报告 -->
-      <div class="report-footer">
-        <!-- 重要风险提示 -->
-        <el-card class="risk-warning-card">
-          <template #header>
+          <!-- 重要风险提示 - 作为分析报告的一部分 -->
+          <div class="risk-warning-section">
             <div class="warning-header">
               <el-icon class="warning-icon"><Warning /></el-icon>
               <span>重要风险提示</span>
+              <el-link href="#" class="warning-link">
+                <el-icon><Link /></el-icon>
+              </el-link>
             </div>
-          </template>
 
-          <div class="risk-content">
-            <div class="risk-title">投资风险提示:</div>
-            <ul class="risk-list">
-              <li><strong>仅供参考:</strong> 本分析结果仅供参考，不构成投资建议</li>
-              <li><strong>投资风险:</strong> 股票投资有风险，可能导致本金损失</li>
-              <li><strong>理性决策:</strong> 请结合多方信息进行理性投资决策</li>
-              <li><strong>专业咨询:</strong> 重大投资决策建议咨询专业财务顾问</li>
-              <li><strong>自担风险:</strong> 投资决策及其后果由投资者自行承担</li>
-            </ul>
+            <el-alert
+              type="warning"
+              :closable="false"
+              class="risk-alert"
+            >
+              <template #default>
+                <div class="risk-content">
+                  <div class="risk-title">投资风险提示:</div>
+                  <ul class="risk-list">
+                    <li><strong>仅供参考:</strong> 本分析结果仅供参考，不构成投资建议</li>
+                    <li><strong>投资风险:</strong> 股票投资有风险，可能导致本金损失</li>
+                    <li><strong>理性决策:</strong> 请结合多方信息进行理性投资决策</li>
+                    <li><strong>专业咨询:</strong> 重大投资决策建议咨询专业财务顾问</li>
+                    <li><strong>自担风险:</strong> 投资决策及其后果由投资者自行承担</li>
+                  </ul>
 
-            <div class="analysis-time">
-              分析生成时间: {{ formatAnalysisTime() }}
-            </div>
+                  <div class="analysis-time">
+                    分析生成时间: {{ formatAnalysisTime() }}
+                  </div>
+                </div>
+              </template>
+            </el-alert>
           </div>
         </el-card>
+      </div>
 
-        <!-- 导出报告 -->
+      <!-- 导出报告 -->
+      <div class="export-section">
         <el-card class="export-card">
           <template #header>
             <div class="export-header">
               <el-icon><Download /></el-icon>
               <span>导出报告</span>
-              <el-link href="#" class="export-link">
-                <el-icon><Link /></el-icon>
-              </el-link>
             </div>
           </template>
 
           <div class="export-content">
-            <!-- Docker环境PDF支持提示 -->
-            <el-alert
-              title="🐳 Docker环境PDF支持已启用"
-              type="success"
-              :closable="false"
-              class="docker-alert"
-            />
-
-            <!-- Pandoc安装提示 -->
-            <el-collapse class="pandoc-info">
-              <el-collapse-item>
-                <template #title>
-                  <el-icon><Document /></el-icon>
-                  <span>如何安装pandoc</span>
-                </template>
-                <div class="pandoc-instructions">
-                  <p>Pandoc是文档转换工具，用于生成Word和PDF格式：</p>
-                  <ul>
-                    <li><strong>Windows:</strong> 从 <a href="https://pandoc.org/installing.html" target="_blank">pandoc.org</a> 下载安装包</li>
-                    <li><strong>macOS:</strong> 使用 <code>brew install pandoc</code></li>
-                    <li><strong>Linux:</strong> 使用 <code>sudo apt-get install pandoc</code></li>
-                  </ul>
-                </div>
-              </el-collapse-item>
-            </el-collapse>
-
             <!-- 导出按钮 -->
             <div class="export-buttons">
               <el-button @click="exportReport('markdown')" :loading="exportLoading.markdown">
@@ -1772,22 +1751,40 @@ onUnmounted(() => {
   gap: 24px;
 }
 
-/* 风险警告卡片 */
-.risk-warning-card {
-  border: 1px solid #f56c6c;
-  background: #fef0f0;
+/* 风险提示部分 - 作为分析报告的一部分 */
+.risk-warning-section {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid #ebeef5;
 }
 
 .warning-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #f56c6c;
+  margin-bottom: 16px;
+  color: #e6a23c;
   font-weight: 600;
+  font-size: 16px;
 }
 
 .warning-icon {
   font-size: 18px;
+}
+
+.warning-link {
+  margin-left: auto;
+  color: #909399;
+}
+
+.risk-alert {
+  border: none;
+  background: #fdf6ec;
+  padding: 0;
+}
+
+.risk-alert :deep(.el-alert__content) {
+  padding: 16px;
 }
 
 .risk-content {
@@ -1797,7 +1794,7 @@ onUnmounted(() => {
 .risk-title {
   font-weight: 600;
   margin-bottom: 12px;
-  color: #f56c6c;
+  color: #e6a23c;
 }
 
 .risk-list {
@@ -1812,7 +1809,7 @@ onUnmounted(() => {
 }
 
 .risk-list strong {
-  color: #f56c6c;
+  color: #e6a23c;
 }
 
 .analysis-time {
@@ -1845,37 +1842,9 @@ onUnmounted(() => {
 .export-content {
   display: flex;
   flex-direction: column;
-  gap: 16px;
 }
 
-.docker-alert {
-  margin-bottom: 16px;
-}
 
-.pandoc-info {
-  margin-bottom: 16px;
-}
-
-.pandoc-instructions {
-  color: #606266;
-  line-height: 1.6;
-}
-
-.pandoc-instructions ul {
-  margin: 12px 0;
-  padding-left: 20px;
-}
-
-.pandoc-instructions li {
-  margin-bottom: 8px;
-}
-
-.pandoc-instructions code {
-  background: #f5f7fa;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-family: 'Courier New', monospace;
-}
 
 .export-buttons {
   display: flex;

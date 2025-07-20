@@ -66,7 +66,7 @@ const showHelp = () => {
         <div class="banner-right">
           <!-- 用户信息 -->
           <div class="user-info-banner">
-            <el-avatar :size="32" background-color="rgba(255, 255, 255, 0.2)">
+            <el-avatar :size="28" background-color="rgba(255, 255, 255, 0.2)">
               {{ userName.charAt(0) }}
             </el-avatar>
             <span class="user-name">{{ userName }}</span>
@@ -103,22 +103,11 @@ const showHelp = () => {
         <div class="sidebar-header">
           <div class="logo-container">
             <div class="logo-icon">📊</div>
-            <h3 v-if="!collapsed" class="app-title">TradingAgents-CN</h3>
+            <h3 v-if="!collapsed" class="app-title">功能导航</h3>
           </div>
         </div>
 
-        <!-- 用户信息 -->
-        <div v-if="!collapsed" class="user-info">
-          <div class="user-avatar">
-            <el-avatar :size="40" background-color="#409EFF">
-              {{ userName.charAt(0) }}
-            </el-avatar>
-          </div>
-          <div class="user-details">
-            <div class="user-name">{{ userName }}</div>
-            <div class="user-role">AI 股票分析师</div>
-          </div>
-        </div>
+
 
         <!-- 导航菜单 -->
         <el-menu
@@ -192,6 +181,7 @@ const showHelp = () => {
   padding: 16px 24px;
   color: white;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  position: relative;
 }
 
 .banner-content {
@@ -200,6 +190,7 @@ const showHelp = () => {
   justify-content: space-between;
   max-width: 1200px;
   margin: 0 auto;
+  position: relative;
 }
 
 .banner-left {
@@ -230,7 +221,8 @@ const showHelp = () => {
 .banner-right {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
+  transform: translate(8px, 4px);
 }
 
 .user-info-banner {
@@ -308,34 +300,11 @@ const showHelp = () => {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
-.user-info {
-  padding: 20px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  margin-bottom: 20px;
-}
 
-.user-details {
-  flex: 1;
-}
-
-.user-name {
-  color: #fff;
-  font-size: 16px;
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-
-.user-role {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 12px;
-}
 
 .sidebar-menu {
   border: none;
-  height: calc(100vh - 180px);
+  height: calc(100vh - 152px);
   overflow-y: auto;
   padding: 0 10px;
 }
