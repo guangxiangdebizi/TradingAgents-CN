@@ -318,18 +318,12 @@
                   </div>
                 </template>
 
-                <!-- 分析ID -->
-                <div class="analysis-info">
-                  <el-icon><Document /></el-icon>
-                  <span>正在分析: {{ analysisId || '生成中...' }}</span>
-                </div>
-
                 <!-- 分析进度 -->
                 <el-card class="progress-detail-card" shadow="never">
                   <template #header>
                     <div class="progress-title">
                       <el-icon><TrendCharts /></el-icon>
-                      <span>分析进度</span>
+                      <span>当前任务</span>
                       <el-icon><Loading /></el-icon>
                     </div>
                   </template>
@@ -723,6 +717,8 @@ const elapsedTime = ref('0秒')
 const estimatedRemaining = ref('计算中...')
 const startTime = ref(null)
 
+
+
 const analysisForm = ref({
   marketType: 'A股',
   stockCode: '000858',
@@ -864,7 +860,6 @@ const refreshProgress = async () => {
     const currentStepIndex = Math.floor(progressPercentage.value / 20)
     if (currentStepIndex < steps.length) {
       currentStep.value = steps[currentStepIndex]
-      currentTask.value = steps[currentStepIndex]
     }
 
   } catch (error) {
@@ -1993,5 +1988,132 @@ onUnmounted(() => {
 
 .section-content p {
   margin-bottom: 16px;
+}
+
+/* 分析进度模块 */
+.analysis-progress-section {
+  margin-top: 24px;
+}
+
+.progress-card {
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+}
+
+.progress-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: #262730;
+}
+
+.progress-detail-card {
+  margin-top: 16px;
+  background: #f8f9fa;
+}
+
+.progress-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  color: #262730;
+}
+
+.progress-stats {
+  margin-bottom: 16px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.stat-label {
+  font-weight: 500;
+  color: #8b949e;
+}
+
+.current-step {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #262730;
+}
+
+.progress-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.metric-item {
+  text-align: center;
+  padding: 12px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e4e7ed;
+}
+
+.metric-label {
+  font-size: 12px;
+  color: #8b949e;
+  margin-bottom: 4px;
+}
+
+.metric-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #262730;
+}
+
+.progress-bar {
+  margin: 16px 0;
+}
+
+.current-task {
+  margin: 16px 0;
+  padding: 12px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e4e7ed;
+}
+
+.task-label {
+  font-weight: 500;
+  color: #8b949e;
+  margin-bottom: 4px;
+}
+
+.task-description {
+  color: #262730;
+}
+
+.current-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 16px 0;
+  padding: 12px;
+  background: #e3f2fd;
+  border-radius: 6px;
+  color: #1976d2;
+}
+
+.progress-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+}
+
+.auto-refresh {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 </style>
