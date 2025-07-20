@@ -5,7 +5,7 @@
 [![Docker](https://img.shields.io/badge/Docker-支持-blue.svg)](https://www.docker.com/)
 
 > 🎯 **本指南适用于**: 初学者到高级用户，涵盖Docker和本地安装两种方式
-> 
+>
 > 📋 **预计时间**: Docker安装 15-30分钟 | 本地安装 30-60分钟
 
 ## 📋 目录
@@ -23,12 +23,14 @@
 ## 🔧 系统要求
 
 ### 最低配置
+
 - **操作系统**: Windows 10/11, macOS 10.15+, Ubuntu 18.04+
 - **内存**: 4GB RAM（推荐 8GB+）
 - **存储**: 5GB 可用空间
 - **网络**: 稳定的互联网连接
 
 ### 推荐配置
+
 - **操作系统**: Windows 11, macOS 12+, Ubuntu 20.04+
 - **内存**: 16GB RAM
 - **存储**: 20GB 可用空间（SSD推荐）
@@ -37,10 +39,12 @@
 ### 软件依赖
 
 #### Docker安装方式
+
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) 4.0+
 - [Docker Compose](https://docs.docker.com/compose/install/) 2.0+
 
 #### 本地安装方式
+
 - [Python](https://www.python.org/downloads/) 3.10+
 - [Git](https://git-scm.com/downloads) 2.30+
 - [Node.js](https://nodejs.org/) 16+ (可选，用于某些功能)
@@ -60,6 +64,7 @@ cp .env.example .env
 # 3. 编辑API密钥（必须）
 # Windows: notepad .env
 # macOS/Linux: nano .env
+# 其中几个AIP必须配置：DASHSCOPE_API_KEY、FINNHUB_API_KEY、TUSHARE_TOKEN
 
 # 4. 启动服务
 docker-compose up -d
@@ -105,17 +110,20 @@ Docker安装是最简单、最稳定的方式，适合所有用户。
 ### 步骤1：安装Docker
 
 #### Windows
+
 1. 下载 [Docker Desktop for Windows](https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe)
 2. 运行安装程序，按提示完成安装
 3. 重启计算机
 4. 启动Docker Desktop，等待启动完成
 
 #### macOS
+
 1. 下载 [Docker Desktop for Mac](https://desktop.docker.com/mac/main/amd64/Docker.dmg)
 2. 拖拽到Applications文件夹
 3. 启动Docker Desktop，按提示完成设置
 
 #### Linux (Ubuntu/Debian)
+
 ```bash
 # 更新包索引
 sudo apt update
@@ -200,6 +208,13 @@ docker-compose logs -f web
 - **Redis管理**: http://localhost:8081 (用户名/密码: admin/tradingagents123)
 - **MongoDB管理**: http://localhost:8082 (可选，需要启动管理服务)
 
+#### 应用界面预览
+
+<div align="center">
+  <img src="../assets/setup/web-interface.png" alt="TradingAgents-CN Web界面" width="800">
+  <p><em>TradingAgents-CN 主界面</em></p>
+</div>
+
 ## 💻 本地安装
 
 本地安装提供更多的控制和自定义选项，适合开发者和高级用户。
@@ -207,6 +222,7 @@ docker-compose logs -f web
 ### 步骤1：安装Python
 
 #### Windows
+
 1. 访问 [Python官网](https://www.python.org/downloads/windows/)
 2. 下载Python 3.10或更高版本
 3. 运行安装程序，**确保勾选"Add Python to PATH"**
@@ -217,6 +233,7 @@ docker-compose logs -f web
    ```
 
 #### macOS
+
 ```bash
 # 使用Homebrew安装（推荐）
 brew install python@3.10
@@ -226,6 +243,7 @@ brew install python@3.10
 ```
 
 #### Linux (Ubuntu/Debian)
+
 ```bash
 # 更新包列表
 sudo apt update
@@ -293,6 +311,7 @@ cp .env.example .env
 ### 步骤6：可选数据库安装
 
 #### MongoDB (推荐)
+
 ```bash
 # Windows: 下载MongoDB Community Server
 # https://www.mongodb.com/try/download/community
@@ -309,6 +328,7 @@ sudo apt install mongodb-org
 ```
 
 #### Redis (推荐)
+
 ```bash
 # Windows: 下载Redis for Windows
 # https://github.com/microsoftarchive/redis/releases
@@ -417,6 +437,7 @@ MAX_RETRIES=3  # 最大重试次数
 ### 获取AI模型API密钥
 
 #### 1. DeepSeek (推荐，性价比最高)
+
 1. 访问 [DeepSeek开放平台](https://platform.deepseek.com/)
 2. 注册账号并完成实名认证
 3. 进入控制台 → API密钥
@@ -426,6 +447,7 @@ MAX_RETRIES=3  # 最大重试次数
 **费用**: 约 ¥1/万tokens，新用户送免费额度
 
 #### 2. 通义千问 (国产，稳定)
+
 1. 访问 [阿里云DashScope](https://dashscope.aliyun.com/)
 2. 登录阿里云账号
 3. 开通DashScope服务
@@ -435,6 +457,7 @@ MAX_RETRIES=3  # 最大重试次数
 **费用**: 按量计费，有免费额度
 
 #### 3. OpenAI (功能强大)
+
 1. 访问 [OpenAI平台](https://platform.openai.com/)
 2. 注册账号并绑定支付方式
 3. 进入API Keys页面
@@ -444,6 +467,7 @@ MAX_RETRIES=3  # 最大重试次数
 **费用**: 按使用量计费，需要美元支付
 
 #### 4. Google Gemini (免费额度大)
+
 1. 访问 [Google AI Studio](https://aistudio.google.com/)
 2. 登录Google账号
 3. 创建API密钥
@@ -454,6 +478,7 @@ MAX_RETRIES=3  # 最大重试次数
 ### 获取数据源API密钥
 
 #### Tushare (A股数据，强烈推荐)
+
 1. 访问 [Tushare官网](https://tushare.pro/)
 2. 注册账号
 3. 获取Token
@@ -462,6 +487,7 @@ MAX_RETRIES=3  # 最大重试次数
 **费用**: 免费，有积分限制
 
 #### FinnHub (美股数据)
+
 1. 访问 [FinnHub](https://finnhub.io/)
 2. 注册免费账号
 3. 获取API密钥
@@ -519,6 +545,7 @@ docker-compose logs redis
 ### 功能测试
 
 #### 测试A股分析
+
 ```bash
 # 在Web界面中测试
 股票代码: 000001
@@ -528,6 +555,7 @@ docker-compose logs redis
 ```
 
 #### 测试美股分析
+
 ```bash
 股票代码: AAPL
 市场类型: 美股
@@ -536,6 +564,7 @@ docker-compose logs redis
 ```
 
 #### 测试港股分析
+
 ```bash
 股票代码: 0700.HK
 市场类型: 港股
@@ -546,14 +575,18 @@ docker-compose logs redis
 ## ❓ 常见问题
 
 ### Q1: 启动时提示"ModuleNotFoundError"
+
 **A**: 依赖包未正确安装
+
 ```bash
 # 解决方案
 pip install -r requirements.txt --upgrade
 ```
 
 ### Q2: API密钥配置后仍然报错
+
 **A**: 检查密钥格式和权限
+
 ```bash
 # 检查环境变量是否生效
 python -c "import os; print(os.getenv('DEEPSEEK_API_KEY'))"
@@ -562,7 +595,9 @@ python -c "import os; print(os.getenv('DEEPSEEK_API_KEY'))"
 ```
 
 ### Q3: Docker启动失败
+
 **A**: 检查Docker服务和端口占用
+
 ```bash
 # 检查Docker状态
 docker info
@@ -575,19 +610,25 @@ docker-compose build --no-cache
 ```
 
 ### Q4: 分析过程中断或失败
+
 **A**: 检查网络连接和API配额
+
 - 确保网络连接稳定
 - 检查API密钥余额
 - 查看应用日志获取详细错误信息
 
 ### Q5: 数据获取失败
+
 **A**: 检查数据源配置
+
 - 确认Tushare Token有效
 - 检查股票代码格式
 - 验证网络访问权限
 
 ### Q6: 中文显示乱码
+
 **A**: 检查系统编码设置
+
 ```bash
 # Windows: 设置控制台编码
 chcp 65001
@@ -597,13 +638,17 @@ locale
 ```
 
 ### Q7: 内存不足错误
+
 **A**: 调整分析参数
+
 - 降低研究深度
 - 减少分析师数量
 - 增加系统内存
 
 ### Q8: 报告导出失败
+
 **A**: 检查导出依赖
+
 ```bash
 # 安装pandoc (PDF导出需要)
 # Windows: 下载安装包
@@ -616,6 +661,7 @@ locale
 ### 日志查看
 
 #### Docker环境
+
 ```bash
 # 查看应用日志
 docker-compose logs -f web
@@ -629,6 +675,7 @@ docker-compose logs
 ```
 
 #### 本地环境
+
 ```bash
 # 查看应用日志
 tail -f logs/tradingagents.log
@@ -640,6 +687,7 @@ python -m streamlit run web/app.py --logger.level=debug
 ### 网络问题
 
 #### 代理设置
+
 ```bash
 # 设置HTTP代理
 export HTTP_PROXY=http://proxy.company.com:8080
@@ -651,6 +699,7 @@ HTTPS_PROXY=http://proxy.company.com:8080
 ```
 
 #### DNS问题
+
 ```bash
 # 使用公共DNS
 # Windows: 设置网络适配器DNS为8.8.8.8
@@ -662,6 +711,7 @@ nameserver 8.8.4.4
 ### 性能优化
 
 #### 内存优化
+
 ```bash
 # 在.env中设置
 STREAMLIT_SERVER_MAX_UPLOAD_SIZE=200
@@ -669,6 +719,7 @@ STREAMLIT_SERVER_MAX_MESSAGE_SIZE=200
 ```
 
 #### 缓存优化
+
 ```bash
 # 启用Redis缓存
 REDIS_ENABLED=true
@@ -678,6 +729,7 @@ CACHE_TTL=7200  # 增加缓存时间
 ### 数据库问题
 
 #### MongoDB连接失败
+
 ```bash
 # 检查MongoDB服务
 # Windows: services.msc 查找MongoDB
@@ -691,6 +743,7 @@ docker-compose up -d mongodb
 ```
 
 #### Redis连接失败
+
 ```bash
 # 检查Redis服务
 redis-cli ping
@@ -704,6 +757,7 @@ docker-compose up -d redis
 ### 权限问题
 
 #### Linux/macOS权限
+
 ```bash
 # 给脚本执行权限
 chmod +x start_web.sh
@@ -713,6 +767,7 @@ sudo chown -R $USER:$USER .
 ```
 
 #### Windows权限
+
 - 以管理员身份运行命令提示符
 - 检查防火墙设置
 - 确保Python在PATH中
@@ -720,6 +775,7 @@ sudo chown -R $USER:$USER .
 ### 重置安装
 
 #### 完全重置Docker环境
+
 ```bash
 # 停止所有服务
 docker-compose down
@@ -734,6 +790,7 @@ docker-compose up -d
 ```
 
 #### 重置本地环境
+
 ```bash
 # 删除虚拟环境
 rm -rf env
@@ -750,16 +807,19 @@ pip install -r requirements.txt
 ## 📞 获取帮助
 
 ### 官方资源
+
 - **项目主页**: https://github.com/hsliuping/TradingAgents-CN
 - **文档中心**: https://www.tradingagents.cn/
 - **问题反馈**: https://github.com/hsliuping/TradingAgents-CN/issues
 
 ### 社区支持
+
 - **微信群**: 扫描README中的二维码
 - **QQ群**: 详见项目主页
 - **邮件支持**: 见项目联系方式
 
 ### 贡献代码
+
 欢迎提交Pull Request和Issue，帮助改进项目！
 
 ---

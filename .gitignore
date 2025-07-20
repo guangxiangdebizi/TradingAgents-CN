@@ -7,6 +7,44 @@ __pycache__/
 .Python
 *.egg-info/
 
+# Node.js 和前端相关
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.nuxt/
+frontend/.next/
+frontend/build/
+frontend/out/
+frontend/.cache/
+frontend/.parcel-cache/
+frontend/.turbo/
+frontend/coverage/
+frontend/.nyc_output/
+frontend/.eslintcache/
+frontend/.stylelintcache/
+frontend/.sass-cache/
+frontend/.pnp/
+frontend/.pnp.js
+frontend/.yarn/cache/
+frontend/.yarn/unplugged/
+frontend/.yarn/build-state.yml
+frontend/.yarn/install-state.gz
+frontend/.yarnrc.yml
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/lerna-debug.log*
+frontend/.pnpm-debug.log*
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+frontend/auto-imports.d.ts
+frontend/components.d.ts
+
+# 前端备份目录 (不纳入版本控制)
+frontend-backup/
+
 # 环境变量文件 (包含敏感API密钥)
 .env
 .env.local
