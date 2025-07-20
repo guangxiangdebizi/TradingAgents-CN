@@ -373,11 +373,15 @@
                   </div>
 
                   <div class="progress-controls">
-                    <el-button @click="refreshProgress" :loading="refreshing" size="small">
+                    <el-button v-if="!analysisResult" @click="refreshProgress" :loading="refreshing" size="small">
                       <el-icon><Loading /></el-icon>
                       刷新进度
                     </el-button>
-                    <div class="auto-refresh">
+                    <el-button v-if="analysisResult" @click="showAnalysisResult" type="primary" size="large">
+                      <el-icon><Document /></el-icon>
+                      查看分析报告
+                    </el-button>
+                    <div v-if="!analysisResult" class="auto-refresh">
                       <el-checkbox v-model="autoRefresh">
                         <el-icon><Loading /></el-icon>
                         自动刷新
@@ -465,7 +469,7 @@
     </el-row>
 
     <!-- 分析结果 -->
-    <div v-if="analysisResult && !loading" class="analysis-result">
+    <div v-if="analysisResult && !loading && showAnalysisReport" class="analysis-result">
       <!-- 第一部分：分析报告摘要 -->
       <div class="analysis-summary">
         <div class="summary-header">
@@ -703,6 +707,7 @@ const showAnalysisProgress = ref(false)
 const showReasoning = ref(true)
 const showConfigInfo = ref(false)
 const activeAnalysisTab = ref('technical')
+const showAnalysisReport = ref(false)
 const autoRefresh = ref(false)
 const refreshing = ref(false)
 const refreshTimer = ref(null)
@@ -828,6 +833,12 @@ const formatDate = (date) => {
   return new Date(date).toLocaleDateString('zh-CN')
 }
 
+// 显示分析报告
+const showAnalysisResult = () => {
+  showAnalysisReport.value = true
+  showAnalysisProgress.value = false
+}
+
 // 刷新进度
 const refreshProgress = async () => {
   refreshing.value = true
@@ -891,6 +902,7 @@ const performAnalysis = async () => {
 
   // 初始化分析进度
   showAnalysisProgress.value = true
+  showAnalysisReport.value = false
   loading.value = true
   analysisResult.value = null
 
@@ -946,6 +958,7 @@ const performAnalysis = async () => {
     currentStatus.value = '❌ 分析失败，请重试'
   } finally {
     loading.value = false
+    // 注意：不隐藏showAnalysisProgress，保持进度模块显示
   }
 }
 
