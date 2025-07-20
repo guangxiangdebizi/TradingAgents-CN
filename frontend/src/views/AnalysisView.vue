@@ -472,68 +472,203 @@
 
     <!-- 分析结果 -->
     <div v-if="analysisResult && !loading" class="analysis-result">
-      <el-card class="result-card">
-        <template #header>
-          <div class="result-header">
-            <el-icon><TrendCharts /></el-icon>
-            <h3>分析结果 - {{ analysisResult.stockName }} ({{ analysisResult.stockCode }})</h3>
-          </div>
-        </template>
+      <!-- 第一部分：分析报告摘要 -->
+      <div class="analysis-summary">
+        <div class="summary-header">
+          <el-icon><Document /></el-icon>
+          <h2>分析报告</h2>
+        </div>
 
-        <div class="result-content">
-          <!-- 股票基本信息 -->
-          <div class="stock-info">
-            <div class="price-info">
-              <span class="current-price">¥{{ analysisResult.currentPrice }}</span>
-              <span class="price-change positive">{{ analysisResult.change }} ({{ analysisResult.changePercent }})</span>
+        <el-card class="summary-card">
+          <div class="stock-title">
+            <el-icon><TrendCharts /></el-icon>
+            <h3>{{ analysisResult.stockCode }} 分析结果</h3>
+          </div>
+
+          <!-- 投资决策摘要 -->
+          <div class="decision-summary">
+            <div class="decision-header">
+              <el-icon><Aim /></el-icon>
+              <h4>投资决策摘要</h4>
+            </div>
+
+            <div class="decision-metrics">
+              <div class="metric-item">
+                <div class="metric-label">
+                  投资建议
+                  <el-tooltip content="基于AI分析的投资建议" placement="top">
+                    <el-icon class="info-icon"><InfoFilled /></el-icon>
+                  </el-tooltip>
+                </div>
+                <div class="metric-value recommendation">
+                  {{ analysisResult.recommendation || '持有' }}
+                </div>
+                <div class="metric-change positive">
+                  <el-icon><ArrowUp /></el-icon>
+                  {{ analysisResult.recommendationChange || '20.0%' }}
+                </div>
+              </div>
+
+              <div class="metric-item">
+                <div class="metric-label">
+                  置信度
+                  <el-tooltip content="AI对分析结果的置信程度" placement="top">
+                    <el-icon class="info-icon"><InfoFilled /></el-icon>
+                  </el-tooltip>
+                </div>
+                <div class="metric-value confidence">
+                  {{ analysisResult.confidence || '70.0%' }}
+                </div>
+                <div class="metric-change positive">
+                  <el-icon><ArrowUp /></el-icon>
+                  {{ analysisResult.confidenceChange || '20.0%' }}
+                </div>
+              </div>
+
+              <div class="metric-item">
+                <div class="metric-label">
+                  风险评分
+                  <el-tooltip content="投资风险评估分数" placement="top">
+                    <el-icon class="info-icon"><InfoFilled /></el-icon>
+                  </el-tooltip>
+                </div>
+                <div class="metric-value risk">
+                  {{ analysisResult.riskScore || '50.0%' }}
+                </div>
+                <div class="metric-change negative">
+                  <el-icon><ArrowUp /></el-icon>
+                  {{ analysisResult.riskChange || '20.0%' }}
+                </div>
+              </div>
+
+              <div class="metric-item">
+                <div class="metric-label">
+                  目标价位
+                  <el-tooltip content="预期目标价格" placement="top">
+                    <el-icon class="info-icon"><InfoFilled /></el-icon>
+                  </el-tooltip>
+                </div>
+                <div class="metric-value target-price">
+                  ¥{{ analysisResult.targetPrice || '135.00' }}
+                </div>
+              </div>
+            </div>
+
+            <!-- AI分析推理 -->
+            <div class="ai-reasoning">
+              <div class="reasoning-header">
+                <el-icon><ChatDotRound /></el-icon>
+                <span>AI分析推理</span>
+                <el-button text @click="toggleReasoning">
+                  <el-icon><ArrowDown v-if="!showReasoning" /><ArrowUp v-else /></el-icon>
+                </el-button>
+              </div>
+              <el-collapse-transition>
+                <div v-show="showReasoning" class="reasoning-content">
+                  {{ analysisResult.reasoning || '五粮液基本面稳健但缺乏催化剂，技术面偏弱，市场情绪谨慎，当前股价处于合理估值区间但不足以支撑立即买入。' }}
+                </div>
+              </el-collapse-transition>
+            </div>
+
+            <!-- 分析配置信息 -->
+            <div class="config-info">
+              <div class="config-header">
+                <el-icon><Setting /></el-icon>
+                <span>分析配置信息</span>
+                <el-button text @click="toggleConfigInfo">
+                  <el-icon><ArrowDown v-if="!showConfigInfo" /><ArrowUp v-else /></el-icon>
+                </el-button>
+              </div>
+              <el-collapse-transition>
+                <div v-show="showConfigInfo" class="config-content">
+                  <div class="config-item">
+                    <span class="config-label">分析日期:</span>
+                    <span class="config-value">{{ formatDate(analysisForm.analysisDate) }}</span>
+                  </div>
+                  <div class="config-item">
+                    <span class="config-label">选择的分析师:</span>
+                    <span class="config-value">{{ analysisForm.selectedAnalysts.join(', ') }}</span>
+                  </div>
+                  <div class="config-item">
+                    <span class="config-label">研究深度:</span>
+                    <span class="config-value">{{ analysisForm.researchDepth }}级</span>
+                  </div>
+                  <div class="config-item">
+                    <span class="config-label">AI模型:</span>
+                    <span class="config-value">{{ analysisForm.llmProvider }}</span>
+                  </div>
+                </div>
+              </el-collapse-transition>
             </div>
           </div>
+        </el-card>
+      </div>
 
-          <!-- 投资建议 -->
-          <div class="recommendation">
-            <el-tag
-              :type="analysisResult.recommendation === 'BUY' ? 'success' : analysisResult.recommendation === 'HOLD' ? 'warning' : 'danger'"
-              size="large"
-            >
-              {{ analysisResult.recommendation === 'BUY' ? '买入' : analysisResult.recommendation === 'HOLD' ? '持有' : '卖出' }}
-            </el-tag>
-            <span class="confidence">置信度: {{ analysisResult.confidence }}%</span>
-          </div>
-
-          <!-- 详细分析 -->
-          <el-row :gutter="20" class="analysis-details">
-            <el-col :span="8">
-              <el-card class="detail-card">
-                <template #header>
-                  <el-icon><TrendCharts /></el-icon>
-                  技术分析
-                </template>
-                <p>{{ analysisResult.analysis.technical }}</p>
-              </el-card>
-            </el-col>
-
-            <el-col :span="8">
-              <el-card class="detail-card">
-                <template #header>
-                  <el-icon><DataBoard /></el-icon>
-                  基本面分析
-                </template>
-                <p>{{ analysisResult.analysis.fundamental }}</p>
-              </el-card>
-            </el-col>
-
-            <el-col :span="8">
-              <el-card class="detail-card">
-                <template #header>
-                  <el-icon><ChatDotRound /></el-icon>
-                  市场情绪
-                </template>
-                <p>{{ analysisResult.analysis.sentiment }}</p>
-              </el-card>
-            </el-col>
-          </el-row>
+      <!-- 第二部分：详细分析报告 -->
+      <div class="detailed-analysis">
+        <div class="detailed-header">
+          <el-icon><Document /></el-icon>
+          <h2>详细分析报告</h2>
         </div>
-      </el-card>
+
+        <el-card class="detailed-card">
+          <!-- 分析标签页 -->
+          <el-tabs v-model="activeAnalysisTab" class="analysis-tabs">
+            <el-tab-pane label="📈 市场技术分析" name="technical">
+              <div class="analysis-section">
+                <h3>{{ analysisResult.stockCode }}（{{ analysisResult.stockName }}）技术分析报告</h3>
+                <div class="section-content">
+                  <h4>一、价格趋势分析</h4>
+                  <p>{{ analysisResult.technicalAnalysis || '根据2025年7月10日至2025年7月20日的交易数据，000858（五粮液）的价格整体呈现震荡下行的趋势。从期间最高价126.11元到最低价117.10元，波动幅度为7.01元，显示出市场情绪较为谨慎。' }}</p>
+
+                  <h4>二、技术指标解读</h4>
+                  <p>{{ analysisResult.technicalIndicators || '从趋势线来看，000858在短期内处于一个横盘整理的状态，但整体趋势偏弱，尤其是在7月18日后，价格持续承压，表明市场存在一定的抛压。' }}</p>
+                </div>
+              </div>
+            </el-tab-pane>
+
+            <el-tab-pane label="🔥 基本面分析" name="fundamental">
+              <div class="analysis-section">
+                <div class="section-content">
+                  <p>{{ analysisResult.fundamentalAnalysis || '基本面分析内容将在这里显示...' }}</p>
+                </div>
+              </div>
+            </el-tab-pane>
+
+            <el-tab-pane label="💭 市场情绪分析" name="sentiment">
+              <div class="analysis-section">
+                <div class="section-content">
+                  <p>{{ analysisResult.sentimentAnalysis || '市场情绪分析内容将在这里显示...' }}</p>
+                </div>
+              </div>
+            </el-tab-pane>
+
+            <el-tab-pane label="📰 新闻事件分析" name="news">
+              <div class="analysis-section">
+                <div class="section-content">
+                  <p>{{ analysisResult.newsAnalysis || '新闻事件分析内容将在这里显示...' }}</p>
+                </div>
+              </div>
+            </el-tab-pane>
+
+            <el-tab-pane label="⚠️ 风险评估" name="risk">
+              <div class="analysis-section">
+                <div class="section-content">
+                  <p>{{ analysisResult.riskAnalysis || '风险评估内容将在这里显示...' }}</p>
+                </div>
+              </div>
+            </el-tab-pane>
+
+            <el-tab-pane label="💡 投资建议" name="recommendation">
+              <div class="analysis-section">
+                <div class="section-content">
+                  <p>{{ analysisResult.investmentAdvice || '投资建议内容将在这里显示...' }}</p>
+                </div>
+              </div>
+            </el-tab-pane>
+          </el-tabs>
+        </el-card>
+      </div>
     </div>
 
     <!-- 加载状态 -->
@@ -561,13 +696,19 @@ import {
   DataBoard,
   InfoFilled,
   Loading,
-  Cpu
+  Cpu,
+  Aim,
+  ArrowUp,
+  ArrowDown
 } from '@element-plus/icons-vue'
 
 // 响应式数据
 const loading = ref(false)
 const analysisResult = ref(null)
 const showAnalysisProgress = ref(false)
+const showReasoning = ref(true)
+const showConfigInfo = ref(false)
+const activeAnalysisTab = ref('technical')
 const autoRefresh = ref(false)
 const refreshing = ref(false)
 const refreshTimer = ref(null)
@@ -675,6 +816,22 @@ const getSelectedAnalystsNames = () => {
   return names.join(', ')
 }
 
+// 切换AI分析推理显示
+const toggleReasoning = () => {
+  showReasoning.value = !showReasoning.value
+}
+
+// 切换配置信息显示
+const toggleConfigInfo = () => {
+  showConfigInfo.value = !showConfigInfo.value
+}
+
+// 格式化日期
+const formatDate = (date) => {
+  if (!date) return ''
+  return new Date(date).toLocaleDateString('zh-CN')
+}
+
 // 刷新进度
 const refreshProgress = async () => {
   refreshing.value = true
@@ -763,16 +920,24 @@ const performAnalysis = async () => {
     analysisResult.value = {
       stockCode: analysisForm.value.stockCode,
       stockName: '五粮液',
-      currentPrice: '52.30',
+      currentPrice: '123.78',
       change: '+2.15',
-      changePercent: '+4.3%',
-      recommendation: 'BUY',
-      confidence: '85',
-      analysis: {
-        technical: '技术指标显示上涨趋势',
-        fundamental: '基本面良好，业绩稳定增长',
-        sentiment: '市场情绪积极，投资者信心较强'
-      }
+      changePercent: '+1.77%',
+      recommendation: '持有',
+      confidence: '70.0%',
+      riskScore: '50.0%',
+      targetPrice: '135.00',
+      recommendationChange: '20.0%',
+      confidenceChange: '20.0%',
+      riskChange: '20.0%',
+      reasoning: '五粮液基本面稳健但缺乏催化剂，技术面偏弱，市场情绪谨慎，当前股价处于合理估值区间但不足以支撑立即买入。',
+      technicalAnalysis: '根据2025年7月10日至2025年7月20日的交易数据，000858（五粮液）的价格整体呈现震荡下行的趋势。从期间最高价126.11元到最低价117.10元，波动幅度为7.01元，显示出市场情绪较为谨慎。具体来看：\n\n• 2025-07-10：开盘价为123.40元，收盘价为123.78元，小幅上涨。\n• 2025-07-14：价格达到125.41元，是期间内的高点。\n• 2025-07-18：价格下跌至123.78元，接近前期低点。\n• 2025-07-20：价格维持在123.78元附近，未出现明显反弹。',
+      technicalIndicators: '从趋势线来看，000858在短期内处于一个横盘整理的状态，但整体趋势偏弱，尤其是在7月18日后，价格持续承压，表明市场存在一定的抛压。',
+      fundamentalAnalysis: '五粮液作为白酒行业龙头企业，基本面相对稳健。公司拥有深厚的品牌底蕴和稳定的市场地位，但在当前经济环境下，消费升级趋势放缓，高端白酒市场竞争加剧。',
+      sentimentAnalysis: '市场情绪方面，投资者对白酒板块整体保持谨慎态度。近期缺乏明显的催化剂事件，机构投资者持仓相对稳定，但新增资金流入有限。',
+      newsAnalysis: '近期五粮液相关新闻主要集中在产品创新和渠道拓展方面，但缺乏重大利好消息。行业政策环境相对稳定，未出现明显的负面影响。',
+      riskAnalysis: '主要风险包括：1）消费需求疲软风险；2）行业竞争加剧风险；3）原材料成本上涨风险；4）政策调控风险。建议投资者关注公司业绩变化和行业发展趋势。',
+      investmentAdvice: '综合考虑技术面、基本面和市场情绪，建议对五粮液采取"持有"策略。短期内股价可能继续震荡，但长期来看，公司基本面支撑股价稳定。建议投资者耐心等待更好的买入时机。'
     }
 
     // 完成分析
@@ -1610,5 +1775,223 @@ onUnmounted(() => {
 
 .faq-item strong {
   color: #262730;
+}
+
+/* 分析报告样式 */
+.analysis-result {
+  margin-top: 24px;
+}
+
+.analysis-summary {
+  margin-bottom: 24px;
+}
+
+.summary-header,
+.detailed-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.summary-header h2,
+.detailed-header h2 {
+  margin: 0;
+  color: #262730;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.stock-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.stock-title h3 {
+  margin: 0;
+  color: #262730;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.decision-summary {
+  margin-top: 16px;
+}
+
+.decision-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.decision-header h4 {
+  margin: 0;
+  color: #262730;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.decision-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.metric-item {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+}
+
+.metric-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 14px;
+  color: #8b949e;
+  margin-bottom: 8px;
+}
+
+.info-icon {
+  font-size: 12px;
+  color: #8b949e;
+}
+
+.metric-value {
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.metric-value.recommendation {
+  color: #f56c6c;
+}
+
+.metric-value.confidence {
+  color: #67c23a;
+}
+
+.metric-value.risk {
+  color: #e6a23c;
+}
+
+.metric-value.target-price {
+  color: #409eff;
+}
+
+.metric-change {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.metric-change.positive {
+  color: #67c23a;
+}
+
+.metric-change.negative {
+  color: #f56c6c;
+}
+
+.ai-reasoning,
+.config-info {
+  margin-top: 24px;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.reasoning-header,
+.config-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e4e7ed;
+  cursor: pointer;
+}
+
+.reasoning-header span,
+.config-header span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  color: #262730;
+}
+
+.reasoning-content,
+.config-content {
+  padding: 16px;
+  background: white;
+}
+
+.reasoning-content {
+  line-height: 1.6;
+  color: #262730;
+}
+
+.config-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.config-item:last-child {
+  border-bottom: none;
+}
+
+.config-label {
+  font-weight: 500;
+  color: #8b949e;
+}
+
+.config-value {
+  color: #262730;
+}
+
+.detailed-analysis {
+  margin-top: 24px;
+}
+
+.analysis-tabs {
+  margin-top: 16px;
+}
+
+.analysis-section h3 {
+  color: #262730;
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.analysis-section h4 {
+  color: #262730;
+  font-size: 16px;
+  font-weight: 600;
+  margin: 16px 0 8px 0;
+}
+
+.section-content {
+  line-height: 1.6;
+  color: #262730;
+}
+
+.section-content p {
+  margin-bottom: 16px;
 }
 </style>
