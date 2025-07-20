@@ -61,7 +61,7 @@ Thumbs.db
 *.xls
 
 # 项目特定目录
-src/
+/src/
 eval_results/
 eval_data/
 results/
