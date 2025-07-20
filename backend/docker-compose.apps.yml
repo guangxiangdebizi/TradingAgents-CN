@@ -1,0 +1,100 @@
+# 应用服务 Docker Compose 配置
+# 使用方法: docker-compose -f docker-compose.simple.yml -f docker-compose.apps.yml up -d
+
+version: '3.8'
+
+services:
+  # API Gateway - 统一入口
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: tradingagents-api-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+      - MONGODB_URL=mongodb://admin:tradingagents123@mongodb:27017/tradingagents?authSource=admin
+      - REDIS_URL=redis://redis:6379
+      - ANALYSIS_ENGINE_URL=http://analysis-engine:8001
+      - DATA_SERVICE_URL=http://data-service:8002
+      - TASK_API_URL=http://task-api:8003
+    env_file:
+      - .env
+    volumes:
+      - ../:/app/project:ro
+    networks:
+      - tradingagents-network
+    depends_on:
+      - mongodb
+      - redis
+      - analysis-engine
+      - data-service
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Analysis Engine - 分析引擎
+  analysis-engine:
+    build:
+      context: ./analysis-engine
+      dockerfile: Dockerfile
+    container_name: tradingagents-analysis-engine
+    ports:
+      - "8001:8001"
+    environment:
+      - PYTHONPATH=/app
+      - MONGODB_URL=mongodb://admin:tradingagents123@mongodb:27017/tradingagents?authSource=admin
+      - REDIS_URL=redis://redis:6379
+      - DATA_SERVICE_URL=http://data-service:8002
+    env_file:
+      - .env
+    volumes:
+      - ../:/app/project:ro
+    networks:
+      - tradingagents-network
+    depends_on:
+      - mongodb
+      - redis
+      - data-service
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Data Service - 数据服务
+  data-service:
+    build:
+      context: ./data-service
+      dockerfile: Dockerfile
+    container_name: tradingagents-data-service
+    ports:
+      - "8002:8002"
+    environment:
+      - PYTHONPATH=/app
+      - MONGODB_URL=mongodb://admin:tradingagents123@mongodb:27017/tradingagents?authSource=admin
+      - REDIS_URL=redis://redis:6379
+    env_file:
+      - .env
+    volumes:
+      - ../:/app/project:ro
+    networks:
+      - tradingagents-network
+    depends_on:
+      - mongodb
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  tradingagents-network:
+    driver: bridge

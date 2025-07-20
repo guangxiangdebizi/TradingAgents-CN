@@ -1,0 +1,108 @@
+# 开发环境 Docker Compose 配置
+# 使用方法: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+version: '3.8'
+
+services:
+  # API Gateway - 开发模式
+  api-gateway:
+    environment:
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - ./api-gateway:/app:rw  # 读写挂载，支持热重载
+      - ../:/app/project:rw
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Analysis Engine - 开发模式
+  analysis-engine:
+    environment:
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - ./analysis-engine:/app:rw
+      - ../:/app/project:rw
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+
+  # Data Service - 开发模式
+  data-service:
+    environment:
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - ./data-service:/app:rw
+      - ../:/app/project:rw
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload
+
+  # Celery Worker - 开发模式
+  celery-worker:
+    environment:
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - ./task-scheduler:/app:rw
+      - ../:/app/project:rw
+    command: celery -A tasks.celery_app worker --loglevel=debug --reload
+
+  # Celery Beat - 开发模式
+  celery-beat:
+    environment:
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - ./task-scheduler:/app:rw
+      - ../:/app/project:rw
+    command: celery -A tasks.celery_app beat --loglevel=debug
+
+  # 开发工具容器
+  dev-tools:
+    image: docker.m.daocloud.io/library/python:3.10-slim
+    container_name: tradingagents-dev-tools
+    working_dir: /app
+    volumes:
+      - ./:/app:rw
+      - ../:/app/project:rw
+    environment:
+      - PYTHONPATH=/app
+      - MONGODB_URL=mongodb://admin:tradingagents123@mongodb:27017/tradingagents?authSource=admin
+      - REDIS_URL=redis://redis:6379
+    networks:
+      - tradingagents-network
+    command: tail -f /dev/null  # 保持容器运行
+    profiles:
+      - dev-tools  # 可选启动
+
+  # MongoDB Express - 数据库管理界面
+  mongo-express:
+    image: mongo-express:latest
+    container_name: tradingagents-mongo-express
+    ports:
+      - "8081:8081"
+    environment:
+      - ME_CONFIG_MONGODB_ADMINUSERNAME=admin
+      - ME_CONFIG_MONGODB_ADMINPASSWORD=tradingagents123
+      - ME_CONFIG_MONGODB_SERVER=mongodb
+      - ME_CONFIG_MONGODB_PORT=27017
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=tradingagents123
+    depends_on:
+      - mongodb
+    networks:
+      - tradingagents-network
+    profiles:
+      - dev-tools
+
+  # Redis Commander - Redis 管理界面
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: tradingagents-redis-commander
+    ports:
+      - "8082:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    depends_on:
+      - redis
+    networks:
+      - tradingagents-network
+    profiles:
+      - dev-tools

@@ -1,0 +1,53 @@
+# 国内镜像源版本 Docker Compose 配置
+# 使用方法: docker-compose -f docker-compose.yml -f docker-compose.china.yml up -d
+
+version: '3.8'
+
+services:
+  # Redis 缓存服务 - 使用腾讯云镜像
+  redis:
+    image: mirror.ccs.tencentyun.com/library/redis:7-alpine
+
+  # MongoDB 主数据库 - 使用腾讯云镜像
+  mongodb:
+    image: mirror.ccs.tencentyun.com/library/mongo:7
+
+  # MinIO 对象存储 - 使用网易云镜像
+  minio:
+    image: hub-mirror.c.163.com/minio/minio:latest
+
+  # API Gateway - 使用腾讯云镜像
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile.china
+
+  # Analysis Engine - 使用腾讯云镜像
+  analysis-engine:
+    build:
+      context: ./analysis-engine
+      dockerfile: Dockerfile.china
+
+  # Data Service - 使用腾讯云镜像
+  data-service:
+    build:
+      context: ./data-service
+      dockerfile: Dockerfile.china
+
+  # Celery Worker - 使用腾讯云镜像
+  celery-worker:
+    build:
+      context: ./task-scheduler
+      dockerfile: Dockerfile.china
+
+  # Celery Beat - 使用腾讯云镜像
+  celery-beat:
+    build:
+      context: ./task-scheduler
+      dockerfile: Dockerfile.china
+
+  # Celery Flower - 使用腾讯云镜像
+  celery-flower:
+    build:
+      context: ./task-scheduler
+      dockerfile: Dockerfile.china

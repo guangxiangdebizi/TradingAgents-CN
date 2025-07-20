@@ -1,0 +1,96 @@
+# 完整的存储层 Docker Compose 配置
+version: '3.8'
+
+services:
+  # ClickHouse - 时序数据主存储
+  clickhouse:
+    image: registry.cn-hangzhou.aliyuncs.com/clickhouse/clickhouse-server:23.8
+    container_name: tradingagents-clickhouse
+    ports:
+      - "8123:8123"  # HTTP接口
+      - "9000:9000"  # Native接口
+    environment:
+      - CLICKHOUSE_DB=tradingagents
+      - CLICKHOUSE_USER=admin
+      - CLICKHOUSE_PASSWORD=tradingagents123
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./scripts/init-clickhouse.sql:/docker-entrypoint-initdb.d/init-clickhouse.sql:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    networks:
+      - tradingagents-network
+
+  # MongoDB - 文档数据存储
+  mongodb:
+    image: registry.cn-hangzhou.aliyuncs.com/library/mongo:7
+    container_name: tradingagents-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=tradingagents123
+      - MONGO_INITDB_DATABASE=tradingagents
+    volumes:
+      - mongodb_data:/data/db
+      - ./scripts/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+    networks:
+      - tradingagents-network
+
+  # Redis - 缓存层
+  redis:
+    image: registry.cn-hangzhou.aliyuncs.com/library/redis:7-alpine
+    container_name: tradingagents-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
+    networks:
+      - tradingagents-network
+
+  # MinIO - 对象存储
+  minio:
+    image: registry.cn-hangzhou.aliyuncs.com/minio/minio:latest
+    container_name: tradingagents-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=admin
+      - MINIO_ROOT_PASSWORD=tradingagents123
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - tradingagents-network
+
+  # PostgreSQL - 关系型数据（可选）
+  postgres:
+    image: registry.cn-hangzhou.aliyuncs.com/library/postgres:15
+    container_name: tradingagents-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=tradingagents
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=tradingagents123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-postgres.sql:/docker-entrypoint-initdb.d/init-postgres.sql:ro
+    networks:
+      - tradingagents-network
+
+networks:
+  tradingagents-network:
+    driver: bridge
+
+volumes:
+  clickhouse_data:
+  mongodb_data:
+  redis_data:
+  minio_data:
+  postgres_data:

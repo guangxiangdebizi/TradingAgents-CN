@@ -1,0 +1,113 @@
+# TradingAgents 本地开发环境配置
+# 只启动基础服务，应用服务本地运行
+version: '3.8'
+
+services:
+  # MongoDB 主数据库
+  mongodb:
+    image: docker.m.daocloud.io/library/mongo:7
+    container_name: tradingagents-mongodb-local
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=tradingagents123
+      - MONGO_INITDB_DATABASE=tradingagents
+      - TZ=Asia/Shanghai
+    volumes:
+      - mongodb_local_data:/data/db
+    networks:
+      - tradingagents-local-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.hello()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis 缓存服务
+  redis:
+    image: docker.m.daocloud.io/library/redis:7-alpine
+    container_name: tradingagents-redis-local
+    ports:
+      - "6379:6379"
+    environment:
+      - TZ=Asia/Shanghai
+    volumes:
+      - redis_local_data:/data
+    networks:
+      - tradingagents-local-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # MinIO 对象存储
+  minio:
+    image: minio/minio:latest
+    container_name: tradingagents-minio-local
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=admin
+      - MINIO_ROOT_PASSWORD=tradingagents123
+      - TZ=Asia/Shanghai
+    volumes:
+      - minio_local_data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - tradingagents-local-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  mongodb_local_data:
+    driver: local
+  redis_local_data:
+    driver: local
+  minio_local_data:
+    driver: local
+
+networks:
+  tradingagents-local-network:
+    driver: bridge
+
+# 本地开发环境说明：
+# 
+# 🎯 用途：
+#   - 基础服务 (MongoDB, Redis, MinIO) 运行在 Docker 中
+#   - 应用服务 (Data Service, Analysis Engine, API Gateway) 本地运行
+#   - 便于开发调试和代码修改
+# 
+# 🚀 启动命令：
+#   docker-compose -f docker-compose.local.yml up -d
+# 
+# 📊 检查服务状态：
+#   docker-compose -f docker-compose.local.yml ps
+#   docker-compose -f docker-compose.local.yml logs
+# 
+# 🔧 应用服务启动：
+#   # 1. Data Service (端口 8002)
+#   cd data-service
+#   python -m uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload
+#   
+#   # 2. Analysis Engine (端口 8001)  
+#   cd analysis-engine
+#   python -m uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+#   
+#   # 3. API Gateway (端口 8000)
+#   cd api-gateway
+#   python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+# 
+# 🛑 停止服务：
+#   docker-compose -f docker-compose.local.yml down
+# 
+# 🗑️ 清理数据：
+#   docker-compose -f docker-compose.local.yml down -v

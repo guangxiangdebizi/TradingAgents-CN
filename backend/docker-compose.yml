@@ -1,0 +1,198 @@
+version: '3.8'
+
+services:
+  # Redis 缓存服务
+  redis:
+    image: docker.m.daocloud.io/library/redis:7-alpine
+    container_name: tradingagents-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - tradingagents-network
+
+  # MongoDB 主数据库
+  mongodb:
+    image: docker.m.daocloud.io/library/mongo:7
+    container_name: tradingagents-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=tradingagents123
+      - MONGO_INITDB_DATABASE=tradingagents
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+      - ./scripts/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+    command: mongod --auth --replSet rs0
+    networks:
+      - tradingagents-network
+
+  # MinIO 对象存储
+  minio:
+    image: docker.m.daocloud.io/minio/minio:latest
+    container_name: tradingagents-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=admin
+      - MINIO_ROOT_PASSWORD=tradingagents123
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - tradingagents-network
+
+  # Celery Worker - 任务执行器
+  celery-worker:
+    build:
+      context: ./task-scheduler
+      dockerfile: Dockerfile
+    container_name: tradingagents-celery-worker
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - MONGODB_URL=mongodb://admin:tradingagents123@mongodb:27017/tradingagents?authSource=admin
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=INFO
+      # API Keys
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - TUSHARE_TOKEN=${TUSHARE_TOKEN}
+      - FINNHUB_API_KEY=${FINNHUB_API_KEY}
+    depends_on:
+      - redis
+      - mongodb
+    networks:
+      - tradingagents-network
+    volumes:
+      - ../:/app/project:ro
+    command: celery -A tasks.celery_app worker --loglevel=info --concurrency=4
+
+  # Celery Beat - 定时任务调度器
+  celery-beat:
+    build:
+      context: ./task-scheduler
+      dockerfile: Dockerfile
+    container_name: tradingagents-celery-beat
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - MONGODB_URL=mongodb://admin:tradingagents123@mongodb:27017/tradingagents?authSource=admin
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=INFO
+    depends_on:
+      - redis
+      - mongodb
+      - celery-worker
+    networks:
+      - tradingagents-network
+    volumes:
+      - ../:/app/project:ro
+      - celery_beat_data:/app/data
+    command: celery -A tasks.celery_app beat --loglevel=info
+
+  # Celery Flower - 任务监控界面
+  celery-flower:
+    build:
+      context: ./task-scheduler
+      dockerfile: Dockerfile
+    container_name: tradingagents-celery-flower
+    ports:
+      - "5555:5555"
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    depends_on:
+      - redis
+      - celery-worker
+    networks:
+      - tradingagents-network
+    command: celery -A tasks.celery_app flower --port=5555
+
+  # API Gateway 网关服务
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: tradingagents-api-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - API_GATEWAY_PORT=8000
+      - ANALYSIS_ENGINE_HOST=analysis-engine
+      - DATA_SERVICE_HOST=data-service
+      - REDIS_URL=redis://redis:6379
+      - MONGODB_URL=mongodb://admin:tradingagents123@mongodb:27017/tradingagents?authSource=admin
+      - LOG_LEVEL=INFO
+    depends_on:
+      - redis
+      - analysis-engine
+      - data-service
+    networks:
+      - tradingagents-network
+    volumes:
+      - ../:/app/project:ro  # 挂载项目根目录（只读）
+
+  # Analysis Engine 分析引擎服务
+  analysis-engine:
+    build:
+      context: ./analysis-engine
+      dockerfile: Dockerfile
+    container_name: tradingagents-analysis-engine
+    ports:
+      - "8001:8001"
+    environment:
+      - ANALYSIS_ENGINE_PORT=8001
+      - DATA_SERVICE_HOST=data-service
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=INFO
+      # AI API Keys
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    depends_on:
+      - redis
+      - data-service
+    networks:
+      - tradingagents-network
+    volumes:
+      - ../:/app/project:ro  # 挂载项目根目录（只读）
+
+  # Data Service 数据服务
+  data-service:
+    build:
+      context: ./data-service
+      dockerfile: Dockerfile
+    container_name: tradingagents-data-service
+    ports:
+      - "8002:8002"
+    environment:
+      - DATA_SERVICE_PORT=8002
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=INFO
+      # Data API Keys
+      - TUSHARE_TOKEN=${TUSHARE_TOKEN}
+      - FINNHUB_API_KEY=${FINNHUB_API_KEY}
+    depends_on:
+      - redis
+    networks:
+      - tradingagents-network
+    volumes:
+      - ../:/app/project:ro  # 挂载项目根目录（只读）
+
+networks:
+  tradingagents-network:
+    driver: bridge
+
+volumes:
+  redis_data:
+  mongodb_data:
+  mongodb_config:
+  minio_data:
+  celery_beat_data:
