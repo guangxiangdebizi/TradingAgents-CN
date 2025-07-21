@@ -931,7 +931,7 @@ const formatAnalysisTime = () => {
 
 // 导出报告
 const exportReport = async (format) => {
-  if (!analysisResult.value) {
+  if (!analysisResult.value || !analysisId.value) {
     ElMessage.warning('没有可导出的分析报告')
     return
   }
@@ -939,32 +939,17 @@ const exportReport = async (format) => {
   exportLoading.value[format] = true
 
   try {
-    // 这里应该调用后端API进行导出
-    // 暂时模拟导出过程
-    await new Promise(resolve => setTimeout(resolve, 2000))
+    // 导入 API 客户端
+    const { exportApi } = await import('../api/client.js')
+
+    // 调用导出 API
+    await exportApi.exportReport(analysisId.value, format)
 
     ElMessage.success(`${format.toUpperCase()} 报告导出成功！`)
 
-    // 实际实现中，这里应该触发文件下载
-    // const response = await fetch(`/api/export/${format}`, {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify(analysisResult.value)
-    // })
-    //
-    // if (response.ok) {
-    //   const blob = await response.blob()
-    //   const url = window.URL.createObjectURL(blob)
-    //   const a = document.createElement('a')
-    //   a.href = url
-    //   a.download = `analysis_${analysisResult.value.stockCode}_${Date.now()}.${format}`
-    //   a.click()
-    //   window.URL.revokeObjectURL(url)
-    // }
-
   } catch (error) {
     console.error('导出失败:', error)
-    ElMessage.error(`${format.toUpperCase()} 报告导出失败`)
+    ElMessage.error(`${format.toUpperCase()} 报告导出失败: ${error.message}`)
   } finally {
     exportLoading.value[format] = false
   }
@@ -1037,12 +1022,6 @@ const performAnalysis = async () => {
   loading.value = true
   analysisResult.value = null
 
-  // 生成分析ID
-  const now = new Date()
-  const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '')
-  const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '')
-  analysisId.value = `analysis_${Math.random().toString(36).substring(2, 8)}_${dateStr}_${timeStr}`
-
   // 重置进度数据
   progressPercentage.value = 0
   startTime.value = Date.now()
@@ -1051,45 +1030,98 @@ const performAnalysis = async () => {
   currentStatus.value = `📊 开始分析 ${analysisForm.value.stockCode} 股票，这可能需要几分钟时间...`
 
   try {
-    // 模拟分析过程
-    await new Promise(resolve => setTimeout(resolve, 3000))
+    // 导入 API 客户端
+    const { analysisApi } = await import('../api/client.js')
 
-    // 模拟分析结果
-    analysisResult.value = {
-      stockCode: analysisForm.value.stockCode,
-      stockName: '五粮液',
-      currentPrice: '123.78',
-      change: '+2.15',
-      changePercent: '+1.77%',
-      recommendation: '持有',
-      confidence: '70.0%',
-      riskScore: '50.0%',
-      targetPrice: '135.00',
-      recommendationChange: '20.0%',
-      confidenceChange: '20.0%',
-      riskChange: '20.0%',
-      reasoning: '五粮液基本面稳健但缺乏催化剂，技术面偏弱，市场情绪谨慎，当前股价处于合理估值区间但不足以支撑立即买入。',
-      technicalAnalysis: '根据2025年7月10日至2025年7月20日的交易数据，000858（五粮液）的价格整体呈现震荡下行的趋势。从期间最高价126.11元到最低价117.10元，波动幅度为7.01元，显示出市场情绪较为谨慎。具体来看：\n\n• 2025-07-10：开盘价为123.40元，收盘价为123.78元，小幅上涨。\n• 2025-07-14：价格达到125.41元，是期间内的高点。\n• 2025-07-18：价格下跌至123.78元，接近前期低点。\n• 2025-07-20：价格维持在123.78元附近，未出现明显反弹。',
-      technicalIndicators: '从趋势线来看，000858在短期内处于一个横盘整理的状态，但整体趋势偏弱，尤其是在7月18日后，价格持续承压，表明市场存在一定的抛压。',
-      fundamentalAnalysis: '五粮液作为白酒行业龙头企业，基本面相对稳健。公司拥有深厚的品牌底蕴和稳定的市场地位，但在当前经济环境下，消费升级趋势放缓，高端白酒市场竞争加剧。',
-      sentimentAnalysis: '市场情绪方面，投资者对白酒板块整体保持谨慎态度。近期缺乏明显的催化剂事件，机构投资者持仓相对稳定，但新增资金流入有限。',
-      newsAnalysis: '近期五粮液相关新闻主要集中在产品创新和渠道拓展方面，但缺乏重大利好消息。行业政策环境相对稳定，未出现明显的负面影响。',
-      riskAnalysis: '主要风险包括：1）消费需求疲软风险；2）行业竞争加剧风险；3）原材料成本上涨风险；4）政策调控风险。建议投资者关注公司业绩变化和行业发展趋势。',
-      investmentAdvice: '综合考虑技术面、基本面和市场情绪，建议对五粮液采取"持有"策略。短期内股价可能继续震荡，但长期来看，公司基本面支撑股价稳定。建议投资者耐心等待更好的买入时机。'
+    // 准备分析请求
+    const analysisRequest = {
+      stock_code: analysisForm.value.stockCode,
+      market_type: analysisForm.value.marketType,
+      analysis_date: analysisForm.value.analysisDate.toISOString(),
+      research_depth: analysisForm.value.researchDepth,
+      market_analyst: analysisForm.value.marketAnalyst,
+      social_analyst: analysisForm.value.socialAnalyst,
+      news_analyst: analysisForm.value.newsAnalyst,
+      fundamental_analyst: analysisForm.value.fundamentalAnalyst,
+      llm_provider: analysisForm.value.llmProvider,
+      model_version: analysisForm.value.modelVersion,
+      enable_memory: analysisForm.value.enableMemory,
+      debug_mode: analysisForm.value.debugMode,
+      max_output_length: analysisForm.value.maxOutputLength,
+      include_sentiment: analysisForm.value.includeSentiment,
+      include_risk_assessment: analysisForm.value.includeRiskAssessment,
+      custom_prompt: analysisForm.value.customPrompt
     }
 
-    // 完成分析
-    progressPercentage.value = 100
-    currentStep.value = '分析完成'
-    currentTask.value = '分析完成'
-    currentStatus.value = '✅ 分析成功完成！'
+    // 启动分析
+    const startResponse = await analysisApi.startAnalysis(analysisRequest)
+
+    if (!startResponse.success) {
+      throw new Error(startResponse.message || '启动分析失败')
+    }
+
+    analysisId.value = startResponse.data.analysis_id
+
+    // 开始轮询进度
+    const pollProgress = async () => {
+      try {
+        const progressResponse = await analysisApi.getProgress(analysisId.value)
+
+        if (progressResponse.success) {
+          const progress = progressResponse.data
+
+          // 更新进度信息
+          progressPercentage.value = progress.progress_percentage || 0
+          currentStep.value = progress.current_step || ''
+          currentTask.value = progress.current_task || ''
+          currentStatus.value = progress.current_status || ''
+
+          // 计算已用时间
+          if (startTime.value) {
+            const elapsed = Math.floor((Date.now() - startTime.value) / 1000)
+            elapsedTime.value = formatTime(elapsed)
+
+            if (progressPercentage.value > 0) {
+              const totalEstimated = (elapsed / progressPercentage.value) * 100
+              const remaining = Math.max(0, totalEstimated - elapsed)
+              estimatedRemaining.value = formatTime(remaining)
+            }
+          }
+
+          // 检查是否完成
+          if (progress.status === 'completed') {
+            // 获取分析结果
+            const resultResponse = await analysisApi.getResult(analysisId.value)
+
+            if (resultResponse.success) {
+              analysisResult.value = resultResponse.data
+              currentStatus.value = '✅ 分析成功完成！'
+              loading.value = false
+              return // 停止轮询
+            }
+          } else if (progress.status === 'failed') {
+            throw new Error(progress.error_message || '分析失败')
+          }
+
+          // 如果还在进行中，继续轮询
+          if (progress.status === 'running' || progress.status === 'pending') {
+            setTimeout(pollProgress, 3000) // 3秒后再次查询
+          }
+        }
+      } catch (error) {
+        console.error('获取进度失败:', error)
+        // 继续轮询，除非是严重错误
+        setTimeout(pollProgress, 5000) // 5秒后重试
+      }
+    }
+
+    // 开始轮询
+    setTimeout(pollProgress, 2000) // 2秒后开始第一次查询
 
   } catch (error) {
     console.error('分析失败:', error)
-    currentStatus.value = '❌ 分析失败，请重试'
-  } finally {
+    currentStatus.value = `❌ 分析失败: ${error.message}`
     loading.value = false
-    // 注意：不隐藏showAnalysisProgress，保持进度模块显示
   }
 }
 
