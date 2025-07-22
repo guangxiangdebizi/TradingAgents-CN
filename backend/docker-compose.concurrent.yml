@@ -1,0 +1,313 @@
+version: '3.8'
+
+services:
+  # ===== 数据库服务 =====
+  
+  mongodb:
+    image: mongo:4.4
+    container_name: tradingagents-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: tradingagents123
+      MONGO_INITDB_DATABASE: tradingagents
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - tradingagents-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongo localhost:27017/test --quiet
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  redis:
+    image: redis:latest
+    container_name: tradingagents-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass tradingagents123
+    volumes:
+      - redis_data:/data
+    networks:
+      - tradingagents-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===== 核心服务 =====
+  
+  data-service:
+    build:
+      context: .
+      dockerfile: data-service/Dockerfile
+    container_name: tradingagents-data-service
+    ports:
+      - "8003:8003"
+    environment:
+      - DATA_SERVICE_HOST=0.0.0.0
+      - DATA_SERVICE_PORT=8003
+      - MONGODB_URL=mongodb://admin:tradingagents123@mongodb:27017/tradingagents?authSource=admin
+      - REDIS_URL=redis://:tradingagents123@redis:6379
+      - PYTHONPATH=/app
+    depends_on:
+      - mongodb
+      - redis
+    volumes:
+      - ../:/app
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+
+  llm-service:
+    build:
+      context: .
+      dockerfile: llm-service/Dockerfile
+    container_name: tradingagents-llm-service
+    ports:
+      - "8004:8004"
+    environment:
+      - LLM_SERVICE_PORT=8004
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PYTHONPATH=/app
+    depends_on:
+      - redis
+    volumes:
+      - ../:/app
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+
+  memory-service:
+    build:
+      context: .
+      dockerfile: memory-service/Dockerfile
+    container_name: tradingagents-memory-service
+    ports:
+      - "8006:8006"
+    environment:
+      - MEMORY_SERVICE_HOST=0.0.0.0
+      - MEMORY_SERVICE_PORT=8006
+      - CHROMA_DB_PATH=/app/data/chroma_db
+      - CHROMA_PERSISTENT=true
+      - PYTHONPATH=/app
+    volumes:
+      - ../:/app
+      - chroma_data:/app/data/chroma_db
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+
+  # ===== Analysis Engine 多实例 =====
+  
+  analysis-engine-1:
+    build:
+      context: .
+      dockerfile: analysis-engine/Dockerfile
+    container_name: tradingagents-analysis-engine-1
+    ports:
+      - "8005:8005"
+    environment:
+      - ANALYSIS_ENGINE_HOST=0.0.0.0
+      - ANALYSIS_ENGINE_PORT=8005
+      - LLM_SERVICE_URL=http://llm-service:8004
+      - DATA_SERVICE_URL=http://data-service:8003
+      - MEMORY_SERVICE_URL=http://memory-service:8006
+      - MAX_CONCURRENT_ANALYSES=5
+      - MAX_QUEUE_SIZE=50
+      - PYTHONPATH=/app
+    depends_on:
+      - data-service
+      - llm-service
+      - memory-service
+    volumes:
+      - ../:/app
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+    command: python app/enhanced_main.py
+
+  analysis-engine-2:
+    build:
+      context: .
+      dockerfile: analysis-engine/Dockerfile
+    container_name: tradingagents-analysis-engine-2
+    ports:
+      - "8015:8005"  # 映射到不同的外部端口
+    environment:
+      - ANALYSIS_ENGINE_HOST=0.0.0.0
+      - ANALYSIS_ENGINE_PORT=8005
+      - LLM_SERVICE_URL=http://llm-service:8004
+      - DATA_SERVICE_URL=http://data-service:8003
+      - MEMORY_SERVICE_URL=http://memory-service:8006
+      - MAX_CONCURRENT_ANALYSES=5
+      - MAX_QUEUE_SIZE=50
+      - PYTHONPATH=/app
+    depends_on:
+      - data-service
+      - llm-service
+      - memory-service
+    volumes:
+      - ../:/app
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+    command: python app/enhanced_main.py
+
+  analysis-engine-3:
+    build:
+      context: .
+      dockerfile: analysis-engine/Dockerfile
+    container_name: tradingagents-analysis-engine-3
+    ports:
+      - "8025:8005"  # 映射到不同的外部端口
+    environment:
+      - ANALYSIS_ENGINE_HOST=0.0.0.0
+      - ANALYSIS_ENGINE_PORT=8005
+      - LLM_SERVICE_URL=http://llm-service:8004
+      - DATA_SERVICE_URL=http://data-service:8003
+      - MEMORY_SERVICE_URL=http://memory-service:8006
+      - MAX_CONCURRENT_ANALYSES=5
+      - MAX_QUEUE_SIZE=50
+      - PYTHONPATH=/app
+    depends_on:
+      - data-service
+      - llm-service
+      - memory-service
+    volumes:
+      - ../:/app
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+    command: python app/enhanced_main.py
+
+  # ===== 负载均衡器 =====
+  
+  nginx-lb:
+    image: nginx:alpine
+    container_name: tradingagents-nginx-lb
+    ports:
+      - "8000:80"  # 负载均衡器入口
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - analysis-engine-1
+      - analysis-engine-2
+      - analysis-engine-3
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+
+  # ===== 任务调度器 =====
+  
+  task-scheduler:
+    build:
+      context: .
+      dockerfile: task-scheduler/Dockerfile
+    container_name: tradingagents-task-scheduler
+    ports:
+      - "8007:8007"
+    environment:
+      - CELERY_BROKER_URL=redis://:tradingagents123@redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://:tradingagents123@redis:6379/2
+      - DATA_SERVICE_URL=http://data-service:8003
+      - ANALYSIS_ENGINE_URL=http://nginx-lb:80  # 使用负载均衡器
+      - PYTHONPATH=/app
+    depends_on:
+      - redis
+      - nginx-lb
+    volumes:
+      - ../:/app
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+
+  celery-worker:
+    build:
+      context: .
+      dockerfile: task-scheduler/Dockerfile
+    container_name: tradingagents-celery-worker
+    command: python start_worker.py
+    environment:
+      - CELERY_BROKER_URL=redis://:tradingagents123@redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://:tradingagents123@redis:6379/2
+      - DATA_SERVICE_URL=http://data-service:8003
+      - ANALYSIS_ENGINE_URL=http://nginx-lb:80
+      - CELERY_QUEUES=data,analysis,maintenance,default
+      - CELERY_CONCURRENCY=4
+      - PYTHONPATH=/app
+    depends_on:
+      - redis
+      - task-scheduler
+    volumes:
+      - ../:/app
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: task-scheduler/Dockerfile
+    container_name: tradingagents-celery-beat
+    command: python start_scheduler.py
+    environment:
+      - CELERY_BROKER_URL=redis://:tradingagents123@redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://:tradingagents123@redis:6379/2
+      - DATA_SERVICE_URL=http://data-service:8003
+      - ANALYSIS_ENGINE_URL=http://nginx-lb:80
+      - PYTHONPATH=/app
+    depends_on:
+      - redis
+      - task-scheduler
+    volumes:
+      - ../:/app
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+
+  # ===== 监控服务 =====
+  
+  flower:
+    build:
+      context: .
+      dockerfile: task-scheduler/Dockerfile
+    container_name: tradingagents-flower
+    command: celery -A tasks.celery_app flower --port=5555
+    ports:
+      - "5555:5555"
+    environment:
+      - CELERY_BROKER_URL=redis://:tradingagents123@redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://:tradingagents123@redis:6379/2
+      - PYTHONPATH=/app
+    depends_on:
+      - redis
+    volumes:
+      - ../:/app
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+
+# 数据卷定义
+volumes:
+  mongodb_data:
+    driver: local
+    name: tradingagents_mongodb_data
+  redis_data:
+    driver: local
+    name: tradingagents_redis_data
+  chroma_data:
+    driver: local
+    name: tradingagents_chroma_data
+
+# 网络定义
+networks:
+  tradingagents-network:
+    driver: bridge
+    name: tradingagents-network
