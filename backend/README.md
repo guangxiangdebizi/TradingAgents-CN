@@ -1,222 +1,85 @@
-# TradingAgents Backend 微服务
+# 🏗️ TradingAgents Backend
 
-基于 FastAPI 的微服务架构，为 TradingAgents-CN 前端提供 REST API 服务。
-
-## 🏗️ 架构概览
+## 📁 目录结构
 
 ```
-Frontend (Vue 3) → API Gateway → Microservices
-                                    ├── Analysis Engine
-                                    ├── Data Service
-                                    └── Task Manager (Phase 2)
+backend/
+├── 📚 docs/                    # 文档目录
+│   ├── api/                    # API文档
+│   ├── data-sources/           # 数据源文档
+│   ├── deployment/             # 部署文档
+│   ├── development/            # 开发文档
+│   ├── troubleshooting/        # 故障排除
+│   └── i18n/                   # 国际化文档
+├── 🧪 tests/                   # 测试目录
+│   ├── unit/                   # 单元测试
+│   ├── integration/            # 集成测试
+│   ├── performance/            # 性能测试
+│   └── fixtures/               # 测试数据
+├── 🔧 tools/                   # 工具目录
+│   ├── data-sources/           # 数据源工具
+│   ├── debugging/              # 调试工具
+│   ├── setup/                  # 设置工具
+│   └── validation/             # 验证工具
+├── 🏗️ scripts/                 # 构建脚本
+├── 🔗 shared/                  # 共享模块
+├── 🌐 data-service/            # 数据服务
+├── 🔍 analysis-engine/         # 分析引擎
+├── 🚪 api-gateway/             # API网关
+└── ⏰ task-scheduler/          # 任务调度器
 ```
-
-## 📦 服务列表
-
-### Phase 1 核心服务
-
-| 服务名称 | 端口 | 描述 |
-|---------|------|------|
-| **API Gateway** | 8000 | 统一入口，路由和认证 |
-| **Analysis Engine** | 8001 | 股票分析和AI模型调用 |
-| **Data Service** | 8002 | 数据获取和缓存 |
-
-### Phase 2 扩展服务（规划中）
-
-| 服务名称 | 端口 | 描述 |
-|---------|------|------|
-| **Task Manager** | 8003 | 任务调度和监控 |
-| **Report Service** | 8004 | 报告生成和导出 |
-| **Config Service** | 8005 | 配置管理 |
 
 ## 🚀 快速开始
 
-### 1. 环境准备
-
+### 1. 环境设置
 ```bash
-# 复制环境变量配置
-cp .env.example .env
+# 配置API密钥
+python tools/setup/setup_api_keys.py
 
-# 编辑配置文件，填入API密钥
-vim .env
+# 验证配置
+python tools/validation/validate_json_config.py
 ```
 
-### 2. 使用 Docker Compose（推荐）
-
+### 2. 启动服务
 ```bash
-# 启动所有服务
-docker-compose up -d
-
-# 查看服务状态
-docker-compose ps
-
-# 查看日志
-docker-compose logs -f
-
-# 停止服务
-docker-compose down
+# 启动数据服务
+cd data-service
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8002
 ```
 
-### 3. 本地开发模式
-
+### 3. 运行测试
 ```bash
-# 启动 Redis
-docker run -d -p 6379:6379 redis:7-alpine
+# 运行所有测试
+python -m pytest tests/
 
-# 安装依赖并启动各服务
-cd data-service && pip install -r requirements.txt && python app/main.py &
-cd analysis-engine && pip install -r requirements.txt && python app/main.py &
-cd api-gateway && pip install -r requirements.txt && python app/main.py &
+# 运行API测试
+python tests/unit/api/test_api_interactive.py
 ```
 
-## 📡 API 接口
+## 📚 文档
 
-### 健康检查
+- [📖 完整文档](docs/README.md)
+- [🔌 API参考](docs/api/data-source-api-reference.md)
+- [🌐 数据源配置](docs/data-sources/new-us-data-sources.md)
+- [🚀 部署指南](docs/deployment/deployment-guide.md)
 
-```bash
-# 检查所有服务状态
-curl http://localhost:8000/health
-```
+## 🧪 测试
 
-### 分析接口
+- [🧪 测试指南](tests/README.md)
+- [🔬 单元测试](tests/unit/)
+- [🔗 集成测试](tests/integration/)
 
-```bash
-# 开始分析
-curl -X POST http://localhost:8000/api/analysis/start \
-  -H "Content-Type: application/json" \
-  -d '{
-    "stock_code": "000858",
-    "market_type": "A股",
-    "research_depth": 3,
-    "market_analyst": true,
-    "fundamental_analyst": true
-  }'
+## 🔧 工具
 
-# 查询进度
-curl http://localhost:8000/api/analysis/{analysis_id}/progress
+- [🔧 工具指南](tools/README.md)
+- [⚙️ 设置工具](tools/setup/)
+- [🐛 调试工具](tools/debugging/)
 
-# 获取结果
-curl http://localhost:8000/api/analysis/{analysis_id}/result
-```
+## 🌟 主要特性
 
-### 数据接口
-
-```bash
-# 获取股票信息
-curl http://localhost:8000/api/stock/info/000858
-
-# 获取历史数据
-curl -X POST http://localhost:8000/api/stock/data \
-  -H "Content-Type: application/json" \
-  -d '{
-    "symbol": "000858",
-    "start_date": "2024-01-01",
-    "end_date": "2024-12-31"
-  }'
-```
-
-## 🔧 开发指南
-
-### 添加新的API接口
-
-1. **在对应服务中添加路由**
-2. **在 API Gateway 中添加转发规则**
-3. **更新共享模型（如需要）**
-4. **编写测试用例**
-
-### 服务间通信
-
-使用 `BaseServiceClient` 进行服务间通信：
-
-```python
-from backend.shared.clients.base import BaseServiceClient
-
-# 创建客户端
-client = BaseServiceClient("data_service")
-
-# 发送请求
-response = await client.get("/api/stock/info/000858")
-```
-
-### 添加新的数据模型
-
-在 `backend/shared/models/` 中定义：
-
-```python
-from pydantic import BaseModel, Field
-
-class NewModel(BaseModel):
-    field1: str = Field(..., description="字段描述")
-    field2: int = Field(default=0, description="字段描述")
-```
-
-## 🐳 Docker 部署
-
-### 构建镜像
-
-```bash
-# 构建所有服务镜像
-docker-compose build
-
-# 构建单个服务
-docker-compose build api-gateway
-```
-
-### 生产环境部署
-
-```bash
-# 使用生产配置
-docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-```
-
-## 📊 监控和日志
-
-### 查看日志
-
-```bash
-# 查看所有服务日志
-docker-compose logs -f
-
-# 查看特定服务日志
-docker-compose logs -f api-gateway
-```
-
-### 健康检查
-
-每个服务都提供 `/health` 端点用于健康检查。
-
-## 🔍 故障排除
-
-### 常见问题
-
-1. **服务启动失败**
-   - 检查端口是否被占用
-   - 确认环境变量配置正确
-   - 查看服务日志
-
-2. **Redis 连接失败**
-   - 确认 Redis 服务正在运行
-   - 检查 `REDIS_URL` 配置
-
-3. **服务间通信失败**
-   - 确认所有服务都已启动
-   - 检查网络配置
-   - 查看服务发现配置
-
-### 调试模式
-
-```bash
-# 启用调试模式
-export DEBUG=true
-export LOG_LEVEL=DEBUG
-
-# 重启服务
-docker-compose restart
-```
-
-## 📚 相关文档
-
-- [API 接口文档](http://localhost:8000/docs) - FastAPI 自动生成
-- [前端对接指南](../frontend/README.md)
-- [部署指南](./docs/deployment.md)
-- [开发规范](./docs/development.md)
+- ✅ **多数据源支持** - Alpha Vantage, Twelve Data, FinnHub等
+- ✅ **智能优先级** - 自动降级和故障转移
+- ✅ **缓存机制** - Redis和MongoDB双重缓存
+- ✅ **国际化支持** - 多语言日志和错误信息
+- ✅ **微服务架构** - 模块化设计，易于扩展
+- ✅ **完整测试** - 单元测试和集成测试覆盖

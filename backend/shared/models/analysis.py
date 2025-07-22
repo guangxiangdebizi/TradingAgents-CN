@@ -33,24 +33,27 @@ class LLMProvider(str, Enum):
 
 class AnalysisRequest(BaseModel):
     """分析请求模型"""
+    # 配置 Pydantic 以避免命名空间冲突
+    model_config = {"protected_namespaces": ()}
+
     stock_code: str = Field(..., description="股票代码")
     market_type: MarketType = Field(default=MarketType.A_STOCK, description="市场类型")
     analysis_date: datetime = Field(default_factory=datetime.now, description="分析日期")
     research_depth: int = Field(default=3, ge=1, le=5, description="研究深度")
-    
+
     # 分析师选择
     market_analyst: bool = Field(default=True, description="市场分析师")
     social_analyst: bool = Field(default=False, description="社交媒体分析师")
     news_analyst: bool = Field(default=False, description="新闻分析师")
     fundamental_analyst: bool = Field(default=True, description="基本面分析师")
-    
+
     # AI模型配置
     llm_provider: LLMProvider = Field(default=LLMProvider.DASHSCOPE, description="LLM提供商")
     model_version: str = Field(default="plus-balanced", description="模型版本")
     enable_memory: bool = Field(default=True, description="启用记忆功能")
     debug_mode: bool = Field(default=False, description="调试模式")
     max_output_length: int = Field(default=4000, description="最大输出长度")
-    
+
     # 高级选项
     include_sentiment: bool = Field(default=True, description="包含情绪分析")
     include_risk_assessment: bool = Field(default=True, description="包含风险评估")

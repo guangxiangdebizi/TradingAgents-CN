@@ -39,33 +39,54 @@ celery_app.conf.update(
     # 定时任务配置
     beat_schedule={
         # ==================== 数据同步任务 ====================
-        
-        # 每日股票数据拉取（交易日收盘后）
-        'sync-daily-stock-data': {
+
+        # 每15分钟更新热门股票数据
+        'update-hot-stocks-every-15-minutes': {
+            'task': 'tasks.data_tasks.update_hot_stocks_data',
+            'schedule': crontab(minute='*/15'),  # 每15分钟执行一次
+            'options': {'queue': 'data', 'expires': 900}
+        },
+
+        # 每小时清理过期数据
+        'cleanup-expired-data-hourly': {
+            'task': 'tasks.data_tasks.cleanup_expired_data',
+            'schedule': crontab(minute=0),  # 每小时的0分执行
+            'options': {'queue': 'data', 'expires': 3600}
+        },
+
+        # 每天凌晨2点更新历史数据
+        'sync-daily-data-at-2am': {
             'task': 'tasks.data_tasks.sync_daily_stock_data',
-            'schedule': crontab(hour=16, minute=30),  # 16:30
-            'options': {'queue': 'data'}
+            'schedule': crontab(hour=2, minute=0),  # 每天凌晨2点执行
+            'options': {'queue': 'data', 'expires': 7200}
         },
-        
-        # 实时价格更新（交易时间）
-        'update-realtime-prices': {
-            'task': 'tasks.data_tasks.update_realtime_prices',
-            'schedule': crontab(minute='*/5'),  # 每5分钟
-            'options': {'queue': 'data'}
+
+        # 每天早上8点数据预热
+        'preheat-cache-at-8am': {
+            'task': 'tasks.data_tasks.preheat_cache',
+            'schedule': crontab(hour=8, minute=0),  # 每天早上8点执行
+            'options': {'queue': 'data', 'expires': 3600}
         },
-        
-        # 财务数据同步（每周一）
-        'sync-financial-data': {
-            'task': 'tasks.data_tasks.sync_financial_data',
-            'schedule': crontab(hour=2, minute=0, day_of_week=1),  # 周一 02:00
-            'options': {'queue': 'data'}
+
+        # 每30分钟更新新闻数据
+        'update-news-every-30-minutes': {
+            'task': 'tasks.data_tasks.update_news_data',
+            'schedule': crontab(minute='*/30'),  # 每30分钟执行一次
+            'options': {'queue': 'data', 'expires': 1800}
         },
-        
-        # 新闻数据抓取（每小时）
-        'fetch-news-data': {
-            'task': 'tasks.data_tasks.fetch_news_data',
-            'schedule': crontab(minute=0),  # 每小时整点
-            'options': {'queue': 'data'}
+
+        # 每6小时更新基本面数据
+        'update-fundamentals-every-6-hours': {
+            'task': 'tasks.data_tasks.update_fundamentals_data',
+            'schedule': crontab(minute=0, hour='*/6'),  # 每6小时执行一次
+            'options': {'queue': 'data', 'expires': 21600}
+        },
+
+        # 每天晚上11点生成数据报告
+        'generate-data-report-at-11pm': {
+            'task': 'tasks.data_tasks.generate_data_report',
+            'schedule': crontab(hour=23, minute=0),  # 每天晚上11点执行
+            'options': {'queue': 'data', 'expires': 3600}
         },
         
         # ==================== 分析任务 ====================

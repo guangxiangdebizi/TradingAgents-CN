@@ -1,0 +1,251 @@
+version: '3.8'
+
+services:
+  # ===== 基础设施服务 =====
+  
+  redis:
+    image: redis:7-alpine
+    container_name: tradingagents-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+
+  mongodb:
+    image: mongo:6
+    container_name: tradingagents-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+      MONGO_INITDB_DATABASE: tradingagents
+    volumes:
+      - mongodb_data:/data/db
+      - ./scripts/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+
+  # ===== 微服务 =====
+  
+  data-service:
+    build:
+      context: .
+      dockerfile: data-service/Dockerfile
+    container_name: tradingagents-data-service
+    ports:
+      - "8002:8002"
+    environment:
+      - MONGODB_URL=mongodb://admin:password123@mongodb:27017/tradingagents?authSource=admin
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONPATH=/app
+    depends_on:
+      - redis
+      - mongodb
+    volumes:
+      - ../:/app
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+
+  llm-service:
+    build:
+      context: .
+      dockerfile: llm-service/Dockerfile
+    container_name: tradingagents-llm-service
+    ports:
+      - "8004:8004"
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DEBUG=false
+      - PYTHONPATH=/app
+    depends_on:
+      - redis
+    volumes:
+      - ../:/app
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+
+  analysis-engine:
+    build:
+      context: .
+      dockerfile: analysis-engine/Dockerfile
+    container_name: tradingagents-analysis-engine
+    ports:
+      - "8001:8001"
+    environment:
+      - DATA_SERVICE_URL=http://data-service:8002
+      - LLM_SERVICE_URL=http://llm-service:8004
+      - MONGODB_URL=mongodb://admin:password123@mongodb:27017/tradingagents?authSource=admin
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONPATH=/app
+    depends_on:
+      - data-service
+      - llm-service
+    volumes:
+      - ../:/app
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: tradingagents-api-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - DATA_SERVICE_URL=http://data-service:8002
+      - ANALYSIS_ENGINE_URL=http://analysis-engine:8001
+      - TASK_SCHEDULER_URL=http://task-scheduler:8003
+      - PYTHONPATH=/app
+    depends_on:
+      - data-service
+      - analysis-engine
+    volumes:
+      - ../:/app
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+
+  task-scheduler:
+    build:
+      context: .
+      dockerfile: task-scheduler/Dockerfile
+    container_name: tradingagents-task-scheduler
+    ports:
+      - "8003:8003"
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - DATA_SERVICE_URL=http://data-service:8002
+      - ANALYSIS_ENGINE_URL=http://analysis-engine:8001
+      - PYTHONPATH=/app
+    depends_on:
+      - redis
+      - data-service
+    volumes:
+      - ../:/app
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+
+  # ===== Celery 服务 =====
+  
+  celery-worker:
+    build:
+      context: .
+      dockerfile: task-scheduler/Dockerfile
+    container_name: tradingagents-celery-worker
+    command: python start_worker.py
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - DATA_SERVICE_URL=http://data-service:8002
+      - ANALYSIS_ENGINE_URL=http://analysis-engine:8001
+      - CELERY_QUEUES=data,analysis,maintenance,default
+      - CELERY_CONCURRENCY=4
+      - PYTHONPATH=/app
+    depends_on:
+      - redis
+      - task-scheduler
+    volumes:
+      - ../:/app
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: task-scheduler/Dockerfile
+    container_name: tradingagents-celery-beat
+    command: python start_scheduler.py
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - DATA_SERVICE_URL=http://data-service:8002
+      - ANALYSIS_ENGINE_URL=http://analysis-engine:8001
+      - PYTHONPATH=/app
+    depends_on:
+      - redis
+      - celery-worker
+    volumes:
+      - ../:/app
+      - celery_beat_data:/tmp
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+
+  # ===== 监控服务 =====
+  
+  flower:
+    image: mher/flower:0.9.7
+    container_name: tradingagents-flower
+    ports:
+      - "5555:5555"
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - FLOWER_PORT=5555
+    depends_on:
+      - redis
+      - celery-worker
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+
+  # ===== 可选：数据库管理工具 =====
+  
+  mongo-express:
+    image: mongo-express:latest
+    container_name: tradingagents-mongo-express
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: password123
+      ME_CONFIG_MONGODB_URL: mongodb://admin:password123@mongodb:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin123
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: tradingagents-redis-commander
+    ports:
+      - "8082:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    depends_on:
+      - redis
+    restart: unless-stopped
+    networks:
+      - tradingagents-network
+
+volumes:
+  mongodb_data:
+    driver: local
+  redis_data:
+    driver: local
+  celery_beat_data:
+    driver: local
+
+networks:
+  tradingagents-network:
+    driver: bridge

@@ -324,6 +324,106 @@ async def get_task_metrics():
         raise HTTPException(status_code=500, detail=f"获取任务指标失败: {str(e)}")
 
 
+# ===== 新增数据任务管理接口 =====
+
+@app.post("/api/tasks/data/update-hot-stocks")
+async def trigger_hot_stocks_update():
+    """手动触发热门股票数据更新"""
+    try:
+        result = data_tasks.update_hot_stocks_data.delay()
+
+        return {
+            "success": True,
+            "data": {
+                "task_id": result.id,
+                "message": "热门股票数据更新任务已提交"
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"启动热门股票数据更新失败: {str(e)}")
+
+@app.post("/api/tasks/data/update-news")
+async def trigger_news_update():
+    """手动触发新闻数据更新"""
+    try:
+        result = data_tasks.update_news_data.delay()
+
+        return {
+            "success": True,
+            "data": {
+                "task_id": result.id,
+                "message": "新闻数据更新任务已提交"
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"启动新闻数据更新失败: {str(e)}")
+
+@app.post("/api/tasks/data/preheat-cache")
+async def trigger_cache_preheat():
+    """手动触发缓存预热"""
+    try:
+        result = data_tasks.preheat_cache.delay()
+
+        return {
+            "success": True,
+            "data": {
+                "task_id": result.id,
+                "message": "缓存预热任务已提交"
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"启动缓存预热失败: {str(e)}")
+
+@app.post("/api/tasks/data/cleanup-cache")
+async def trigger_cache_cleanup():
+    """手动触发缓存清理"""
+    try:
+        result = data_tasks.cleanup_expired_data.delay()
+
+        return {
+            "success": True,
+            "data": {
+                "task_id": result.id,
+                "message": "缓存清理任务已提交"
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"启动缓存清理失败: {str(e)}")
+
+@app.post("/api/tasks/data/custom-update")
+async def trigger_custom_update(request: Dict[str, Any]):
+    """手动触发自定义数据更新"""
+    try:
+        symbols = request.get("symbols", [])
+        data_types = request.get("data_types", [])
+        start_date = request.get("start_date")
+        end_date = request.get("end_date")
+
+        if not symbols:
+            raise HTTPException(status_code=400, detail="股票代码列表不能为空")
+        if not data_types:
+            raise HTTPException(status_code=400, detail="数据类型列表不能为空")
+
+        result = data_tasks.update_custom_stocks_data.delay(
+            symbols=symbols,
+            data_types=data_types,
+            start_date=start_date,
+            end_date=end_date
+        )
+
+        return {
+            "success": True,
+            "data": {
+                "task_id": result.id,
+                "message": f"自定义数据更新任务已提交: {len(symbols)} 只股票",
+                "symbols_count": len(symbols),
+                "data_types": data_types
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"启动自定义数据更新失败: {str(e)}")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8003)

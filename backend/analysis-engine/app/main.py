@@ -28,9 +28,9 @@ from backend.shared.utils.logger import get_service_logger
 from backend.shared.utils.config import get_service_config
 from backend.shared.clients.base import BaseServiceClient
 
-# 导入现有的分析逻辑
-from tradingagents.graph.trading_graph import TradingAgentsGraph
-from tradingagents.default_config import DEFAULT_CONFIG
+# 导入独立的分析逻辑 (不直接依赖tradingagents)
+from .analysis.independent_analyzer import IndependentAnalyzer
+from .analysis.config import ANALYSIS_CONFIG
 
 # 全局变量
 logger = get_service_logger("analysis-engine")
@@ -245,18 +245,19 @@ async def perform_stock_analysis(analysis_id: str, request: AnalysisRequest):
             f"🤖 AI正在分析 {request.stock_code}，请耐心等待..."
         )
         
-        # 调用现有的分析逻辑
-        # 使用 TradingAgentsGraph 进行分析
-        config = DEFAULT_CONFIG.copy()
-        config["llm_provider"] = analysis_config.get("llm_provider", "deepseek")
-        config["online_tools"] = True
-        config["debug"] = analysis_config.get("debug_mode", False)
+        # 使用独立分析器进行分析
+        config = ANALYSIS_CONFIG.copy()
+        config.update({
+            "llm_provider": analysis_config.get("llm_provider", "deepseek"),
+            "debug_mode": analysis_config.get("debug_mode", False),
+            "enable_tradingagents_api": True  # 尝试调用TradingAgents API
+        })
 
-        # 初始化分析图
-        ta = TradingAgentsGraph(debug=config["debug"], config=config)
+        # 初始化独立分析器
+        analyzer = IndependentAnalyzer(config=config)
 
         # 执行分析
-        _, analysis_result_raw = ta.propagate(
+        analysis_result_raw = await analyzer.analyze_stock(
             analysis_config["company_of_interest"],
             analysis_config["trade_date"]
         )
@@ -272,19 +273,45 @@ async def perform_stock_analysis(analysis_id: str, request: AnalysisRequest):
         )
         
         # 解析分析结果
-        # 这里需要根据实际的分析结果格式进行解析
-        analysis_result = AnalysisResult(
-            analysis_id=analysis_id,
-            stock_code=request.stock_code,
-            stock_name="股票名称",  # 从分析结果中提取
-            recommendation="持有",  # 从分析结果中提取
-            confidence="75.0%",
-            risk_score="45.0%",
-            target_price="120.00",
-            reasoning="基于AI多维度分析的投资建议...",
-            technical_analysis=str(analysis_result_raw),  # 暂时直接转换
-            analysis_config=analysis_config
-        )
+        if analysis_result_raw.get("success"):
+            analysis_data = analysis_result_raw.get("analysis", {})
+            market_data = analysis_result_raw.get("market_data", {})
+
+            # 格式化推荐动作
+            action_map = {"BUY": "买入", "SELL": "卖出", "HOLD": "持有"}
+            recommendation = action_map.get(analysis_data.get("action", "HOLD"), "持有")
+
+            # 格式化置信度和风险评分
+            confidence = f"{analysis_data.get('confidence', 0.5) * 100:.1f}%"
+            risk_score = f"{analysis_data.get('risk_score', 0.5) * 100:.1f}%"
+
+            analysis_result = AnalysisResult(
+                analysis_id=analysis_id,
+                stock_code=request.stock_code,
+                stock_name=analysis_result_raw.get("company_name", request.stock_code),
+                recommendation=recommendation,
+                confidence=confidence,
+                risk_score=risk_score,
+                target_price=f"{market_data.get('current_price', 0):.2f}",
+                reasoning=analysis_data.get("reasoning", "分析完成"),
+                technical_analysis=json.dumps(analysis_result_raw, ensure_ascii=False, indent=2),
+                analysis_config=analysis_config
+            )
+        else:
+            # 分析失败的情况
+            error_msg = analysis_result_raw.get("error", "分析失败")
+            analysis_result = AnalysisResult(
+                analysis_id=analysis_id,
+                stock_code=request.stock_code,
+                stock_name=request.stock_code,
+                recommendation="持有",
+                confidence="50.0%",
+                risk_score="50.0%",
+                target_price="0.00",
+                reasoning=f"分析失败: {error_msg}",
+                technical_analysis=json.dumps(analysis_result_raw, ensure_ascii=False, indent=2),
+                analysis_config=analysis_config
+            )
         
         # 保存分析结果
         await save_analysis_result(analysis_id, analysis_result)

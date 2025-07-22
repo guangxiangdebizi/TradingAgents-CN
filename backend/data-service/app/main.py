@@ -10,6 +10,31 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
+# 加载环境变量 - 优先加载backend目录的.env，然后是项目根目录的.env
+try:
+    from dotenv import load_dotenv
+
+    # 获取backend目录路径
+    backend_dir = Path(__file__).parent.parent.parent
+
+    # 优先加载backend目录的.env文件
+    backend_env = backend_dir / ".env"
+    if backend_env.exists():
+        load_dotenv(backend_env, override=True)
+        print(f"✅ 加载Backend环境变量: {backend_env}")
+
+    # 然后加载项目根目录的.env文件（作为备用）
+    root_env = project_root / ".env"
+    if root_env.exists():
+        load_dotenv(root_env, override=False)  # 不覆盖已有的环境变量
+        print(f"✅ 加载项目根目录环境变量: {root_env}")
+
+    if not backend_env.exists() and not root_env.exists():
+        print("⚠️ 未找到.env文件，将使用系统环境变量")
+
+except ImportError:
+    print("⚠️ python-dotenv未安装，将使用系统环境变量")
+
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -18,12 +43,21 @@ from typing import Optional, List
 
 # 导入共享模块
 from backend.shared.models.data import (
-    StockDataRequest, StockInfo, StockPrice, MarketData, 
+    StockDataRequest, StockInfo, StockPrice, MarketData,
     NewsItem, FundamentalData, DataSourceStatus
 )
 from backend.shared.models.analysis import APIResponse, HealthCheck
 from backend.shared.utils.logger import get_service_logger
 from backend.shared.utils.config import get_service_config
+
+# 导入国际化模块
+from backend.shared.i18n import get_i18n_manager, _, SupportedLanguage
+from backend.shared.i18n.middleware import I18nMiddleware, i18n_response
+from backend.shared.i18n.utils import localize_stock_data, get_supported_languages
+from backend.shared.i18n.logger import get_i18n_logger
+from backend.shared.i18n.debug_middleware import (
+    APIDebugMiddleware, PerformanceMonitorMiddleware, ValidationDebugMiddleware
+)
 
 # 导入现有的数据获取逻辑
 from tradingagents.dataflows.interface import (
@@ -41,8 +75,11 @@ from backend.shared.database.mongodb import get_db_manager, get_stock_repository
 
 # 全局变量
 logger = get_service_logger("data-service")
+debug_logger = get_i18n_logger("data-service-debug")
 redis_client: Optional[redis.Redis] = None
 db_manager = None
+data_manager_instance = None
+enhanced_data_manager_instance = None
 
 
 @asynccontextmanager
@@ -87,6 +124,59 @@ async def lifespan(app: FastAPI):
     logger.info("✅ Data Service 已关闭")
 
 
+def get_data_manager():
+    """获取数据管理器实例"""
+    global data_manager_instance
+    if data_manager_instance is None:
+        # 导入并初始化数据管理器
+        try:
+            from .data_manager import DataManager
+            from pymongo import MongoClient
+            import redis
+
+            # 创建数据库连接 (带认证)
+            mongodb_client = MongoClient("mongodb://admin:tradingagents123@localhost:27017/tradingagents?authSource=admin")
+            redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+
+            # 获取当前语言设置
+            current_language = get_i18n_manager().get_language()
+
+            # 创建数据管理器实例
+            data_manager_instance = DataManager(mongodb_client, redis_client, current_language)
+            logger.info("✅ 数据管理器初始化成功")
+        except Exception as e:
+            logger.error(f"❌ 数据管理器初始化失败: {e}")
+            raise HTTPException(status_code=500, detail=f"数据管理器初始化失败: {str(e)}")
+
+    return data_manager_instance
+
+
+def get_enhanced_data_manager():
+    """获取增强数据管理器实例"""
+    global enhanced_data_manager_instance
+    if enhanced_data_manager_instance is None:
+        try:
+            from .enhanced_data_manager import EnhancedDataManager
+            from pymongo import MongoClient
+            import redis
+
+            # 创建数据库连接 (带认证)
+            mongodb_client = MongoClient("mongodb://admin:tradingagents123@localhost:27017/tradingagents?authSource=admin")
+            redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+
+            # 获取当前语言设置
+            current_language = get_i18n_manager().get_language()
+
+            # 创建增强数据管理器实例
+            enhanced_data_manager_instance = EnhancedDataManager(mongodb_client, redis_client, current_language)
+            logger.info("✅ 增强数据管理器初始化成功")
+        except Exception as e:
+            logger.error(f"❌ 增强数据管理器初始化失败: {e}")
+            raise HTTPException(status_code=500, detail=f"增强数据管理器初始化失败: {str(e)}")
+
+    return enhanced_data_manager_instance
+
+
 # 创建FastAPI应用
 app = FastAPI(
     title="TradingAgents Data Service",
@@ -111,6 +201,28 @@ class UTF8JSONResponse(JSONResponse):
         ).encode("utf-8")
 
 app.default_response_class = UTF8JSONResponse
+
+# 添加调试中间件（开发环境）
+import os
+DEBUG_MODE = os.getenv("DEBUG", "false").lower() == "true"
+
+if DEBUG_MODE:
+    # API调试中间件
+    app.add_middleware(
+        APIDebugMiddleware,
+        enable_debug=True,
+        log_headers=True,
+        log_body=True
+    )
+
+    # 性能监控中间件
+    app.add_middleware(PerformanceMonitorMiddleware, enable_monitoring=True)
+
+    # 验证调试中间件
+    app.add_middleware(ValidationDebugMiddleware, enable_validation_debug=True)
+
+# 添加国际化中间件
+app.add_middleware(I18nMiddleware, auto_detect=True)
 
 # 添加CORS中间件
 app.add_middleware(
@@ -149,6 +261,86 @@ async def health_check():
         dependencies=dependencies
     )
 
+# ===== 国际化接口 =====
+
+@app.get("/api/i18n/languages", response_model=APIResponse)
+async def get_supported_languages_api():
+    """获取支持的语言列表"""
+    try:
+        languages = get_supported_languages()
+        return i18n_response.success_response("api.success.languages", languages)
+    except Exception as e:
+        logger.error(f"❌ 获取语言列表失败: {e}")
+        return i18n_response.error_response("api.error.internal_error")
+
+@app.get("/api/i18n/current", response_model=APIResponse)
+async def get_current_language():
+    """获取当前语言"""
+    try:
+        i18n_manager = get_i18n_manager()
+        current_lang = i18n_manager.get_language()
+
+        return i18n_response.success_response("api.success.current_language", {
+            "language": current_lang.value,
+            "name": i18n_manager.get_available_languages().get(current_lang.value, current_lang.value)
+        })
+    except Exception as e:
+        logger.error(f"❌ 获取当前语言失败: {e}")
+        return i18n_response.error_response("api.error.internal_error")
+
+@app.post("/api/i18n/set-language", response_model=APIResponse)
+async def set_language(request: dict):
+    """设置语言"""
+    try:
+        language = request.get("language")
+        if not language:
+            return i18n_response.error_response("api.validation.required_field")
+
+        i18n_manager = get_i18n_manager()
+        if i18n_manager.set_language(language):
+            return i18n_response.success_response("api.success.language_set", {
+                "language": i18n_manager.get_language().value
+            })
+        else:
+            return i18n_response.error_response("api.error.invalid_language")
+    except Exception as e:
+        logger.error(f"❌ 设置语言失败: {e}")
+        return i18n_response.error_response("api.error.internal_error")
+
+@app.get("/api/i18n/stats", response_model=APIResponse)
+async def get_translation_stats():
+    """获取翻译统计信息"""
+    try:
+        i18n_manager = get_i18n_manager()
+        stats = i18n_manager.get_translation_stats()
+        return i18n_response.success_response("api.success.translation_stats", stats)
+    except Exception as e:
+        logger.error(f"❌ 获取翻译统计失败: {e}")
+        return i18n_response.error_response("api.error.internal_error")
+
+@app.post("/api/i18n/set-log-language", response_model=APIResponse)
+async def set_log_language(request: dict):
+    """设置日志语言"""
+    try:
+        language = request.get("language")
+        if not language:
+            return i18n_response.error_response("api.validation.required_field")
+
+        # 设置全局语言
+        i18n_manager = get_i18n_manager()
+        if not i18n_manager.set_language(language):
+            return i18n_response.error_response("api.error.invalid_language")
+
+        # 设置数据管理器日志语言
+        data_manager = get_data_manager()
+        data_manager.set_log_language(i18n_manager.get_language())
+
+        return i18n_response.success_response("api.success.log_language_set", {
+            "language": i18n_manager.get_language().value
+        })
+    except Exception as e:
+        logger.error(f"❌ 设置日志语言失败: {e}")
+        return i18n_response.error_response("api.error.internal_error")
 
 @app.get("/api/stock/info/{symbol}", response_model=APIResponse)
 async def get_stock_info(
@@ -157,28 +349,51 @@ async def get_stock_info(
 ):
     """获取股票基本信息"""
     try:
+        # Debug: 记录API调用开始
+        debug_logger.debug_api_request_received("GET", f"/api/stock/info/{symbol}")
+        debug_logger.debug_validation_start("symbol")
+
+        if not symbol or len(symbol.strip()) == 0:
+            debug_logger.debug_validation_failed("symbol", "empty_or_invalid")
+            raise HTTPException(status_code=400, detail="股票代码不能为空")
+
+        debug_logger.debug_validation_passed("symbol")
         logger.info(f"📊 获取股票信息: {symbol}")
-        
+
         # 检查缓存
         cache_key = f"stock_info:{symbol}"
+        debug_logger.debug_cache_check_start(symbol, "stock_info")
+
         if redis_client:
             cached_data = await redis_client.get(cache_key)
             if cached_data:
+                debug_logger.debug_cache_check_result("hit", symbol)
                 logger.debug(f"💾 从缓存获取股票信息: {symbol}")
                 import json
+
+                debug_logger.debug_api_response_prepared(200)
                 return APIResponse(
                     success=True,
                     message="获取股票信息成功（缓存）",
                     data=json.loads(cached_data)
                 )
+
+        debug_logger.debug_cache_check_result("miss", symbol)
         
         # 从数据源获取
+        debug_logger.debug_data_source_select("china_stock_unified", symbol)
+        debug_logger.debug_data_source_call("china_stock_unified", f"stock_info/{symbol}")
+
         info_data = get_china_stock_info_unified(symbol)
-        
+
         if not info_data or "错误" in str(info_data):
+            debug_logger.debug_data_source_response("china_stock_unified", "error", 0)
             raise HTTPException(status_code=404, detail=f"未找到股票 {symbol} 的信息")
-        
+
+        debug_logger.debug_data_source_response("china_stock_unified", "success", len(str(info_data)))
+
         # 解析数据（这里需要根据实际返回格式调整）
+        debug_logger.debug_data_transform_start("raw_response", "stock_info")
         stock_info = {
             "symbol": symbol,
             "name": "股票名称",  # 需要从info_data中解析
@@ -188,21 +403,29 @@ async def get_stock_info(
             "market_cap": None,
             "currency": "CNY"
         }
-        
+        debug_logger.debug_data_transform_end(1)
+
         # 缓存数据
         if redis_client:
+            debug_logger.debug_cache_save_start(symbol, "stock_info")
             import json
             await redis_client.setex(
-                cache_key, 
+                cache_key,
                 3600,  # 1小时缓存
                 json.dumps(stock_info, ensure_ascii=False)
             )
-        
-        return APIResponse(
-            success=True,
-            message="获取股票信息成功",
-            data=stock_info
-        )
+            debug_logger.debug_cache_save_end(symbol, 3600)
+
+        # 本地化数据
+        debug_logger.debug_data_transform_start("stock_info", "localized_data")
+        localized_data = localize_stock_data(stock_info)
+        debug_logger.debug_data_transform_end(1)
+
+        # Debug: 记录响应准备
+        debug_logger.debug_api_response_prepared(200)
+
+        # 使用国际化响应
+        return i18n_response.success_response("api.success.stock_info", localized_data)
         
     except HTTPException:
         raise
@@ -403,27 +626,699 @@ async def get_stock_news(
 async def get_data_sources_status():
     """获取数据源状态"""
     try:
-        # 这里可以检查各个数据源的状态
-        status_data = {
-            "tushare": {"status": "healthy", "last_update": "2025-01-20T10:00:00Z"},
-            "akshare": {"status": "healthy", "last_update": "2025-01-20T10:00:00Z"},
-            "baostock": {"status": "healthy", "last_update": "2025-01-20T10:00:00Z"},
-        }
-        
+        data_manager = get_data_manager()
+        status_data = await data_manager.health_check_data_sources()
+
         return APIResponse(
             success=True,
             message="获取数据源状态成功",
             data=status_data
         )
-        
+
     except Exception as e:
         logger.error(f"❌ 获取数据源状态失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取数据源状态失败: {str(e)}")
 
+@app.get("/api/data-sources/stats", response_model=APIResponse)
+async def get_data_sources_stats():
+    """获取数据源统计信息"""
+    try:
+        data_manager = get_data_manager()
+        factory = data_manager.data_source_factory
+        stats_data = factory.get_source_stats()
+
+        return APIResponse(
+            success=True,
+            message="获取数据源统计成功",
+            data=stats_data
+        )
+
+    except Exception as e:
+        logger.error(f"❌ 获取数据源统计失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取数据源统计失败: {str(e)}")
+
+@app.post("/api/data-sources/health-check", response_model=APIResponse)
+async def trigger_health_check():
+    """手动触发数据源健康检查"""
+    try:
+        data_manager = get_data_manager()
+        health_status = await data_manager.health_check_data_sources()
+
+        return APIResponse(
+            success=True,
+            message="数据源健康检查完成",
+            data=health_status
+        )
+
+    except Exception as e:
+        logger.error(f"❌ 数据源健康检查失败: {e}")
+        raise HTTPException(status_code=500, detail=f"数据源健康检查失败: {str(e)}")
+
+# ===== 数据源优先级管理接口 =====
+
+@app.get("/api/data-sources/priority/profiles", response_model=APIResponse)
+async def get_priority_profiles():
+    """获取所有优先级配置文件"""
+    try:
+        data_manager = get_data_manager()
+        factory = data_manager.data_source_factory
+        profiles = factory.get_available_priority_profiles()
+
+        return APIResponse(
+            success=True,
+            message="获取优先级配置文件成功",
+            data=profiles
+        )
+
+    except Exception as e:
+        logger.error(f"❌ 获取优先级配置文件失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取优先级配置文件失败: {str(e)}")
+
+@app.get("/api/data-sources/priority/current", response_model=APIResponse)
+async def get_current_priority_profile():
+    """获取当前使用的优先级配置文件"""
+    try:
+        data_manager = get_data_manager()
+        factory = data_manager.data_source_factory
+        current_profile = factory.get_current_priority_profile()
+
+        return APIResponse(
+            success=True,
+            message="获取当前优先级配置成功",
+            data={"current_profile": current_profile}
+        )
+
+    except Exception as e:
+        logger.error(f"❌ 获取当前优先级配置失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取当前优先级配置失败: {str(e)}")
+
+@app.post("/api/data-sources/priority/switch", response_model=APIResponse)
+async def switch_priority_profile(request: dict):
+    """切换优先级配置文件"""
+    try:
+        profile_name = request.get("profile_name")
+        if not profile_name:
+            raise HTTPException(status_code=400, detail="缺少 profile_name 参数")
+
+        data_manager = get_data_manager()
+        factory = data_manager.data_source_factory
+
+        if factory.set_priority_profile(profile_name):
+            return APIResponse(
+                success=True,
+                message=f"成功切换到配置文件: {profile_name}",
+                data={"new_profile": profile_name}
+            )
+        else:
+            raise HTTPException(status_code=400, detail=f"配置文件不存在: {profile_name}")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ 切换优先级配置失败: {e}")
+        raise HTTPException(status_code=500, detail=f"切换优先级配置失败: {str(e)}")
+
+@app.post("/api/data-sources/priority/reload", response_model=APIResponse)
+async def reload_priority_config():
+    """重新加载优先级配置"""
+    try:
+        data_manager = get_data_manager()
+        factory = data_manager.data_source_factory
+
+        if factory.reload_priority_config():
+            return APIResponse(
+                success=True,
+                message="优先级配置重新加载成功",
+                data={}
+            )
+        else:
+            raise HTTPException(status_code=500, detail="重新加载配置失败")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ 重新加载优先级配置失败: {e}")
+        raise HTTPException(status_code=500, detail=f"重新加载优先级配置失败: {str(e)}")
+
+# ===== 本地数据管理接口 =====
+
+@app.get("/api/local-data/summary", response_model=APIResponse)
+async def get_local_data_summary():
+    """获取本地数据存储摘要"""
+    try:
+        data_manager = get_data_manager()
+        summary = await data_manager.get_local_data_summary()
+
+        return APIResponse(
+            success=True,
+            message="获取本地数据摘要成功",
+            data=summary
+        )
+
+    except Exception as e:
+        logger.error(f"❌ 获取本地数据摘要失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取本地数据摘要失败: {str(e)}")
+
+@app.get("/api/local-data/history/{symbol}", response_model=APIResponse)
+async def get_symbol_data_history(symbol: str):
+    """获取特定股票的数据历史"""
+    try:
+        data_manager = get_data_manager()
+        history = await data_manager.get_symbol_data_history(symbol)
+
+        return APIResponse(
+            success=True,
+            message=f"获取 {symbol} 数据历史成功",
+            data=history
+        )
+
+    except Exception as e:
+        logger.error(f"❌ 获取股票数据历史失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取股票数据历史失败: {str(e)}")
+
+@app.post("/api/local-data/cleanup", response_model=APIResponse)
+async def cleanup_old_data(request: dict):
+    """清理旧数据"""
+    try:
+        days = request.get("days", 30)
+        if not isinstance(days, int) or days < 1:
+            raise HTTPException(status_code=400, detail="days 参数必须是大于0的整数")
+
+        data_manager = get_data_manager()
+        cleanup_stats = await data_manager.cleanup_old_data(days)
+
+        return APIResponse(
+            success=True,
+            message=f"清理 {days} 天前的旧数据成功",
+            data=cleanup_stats
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ 清理旧数据失败: {e}")
+        raise HTTPException(status_code=500, detail=f"清理旧数据失败: {str(e)}")
+
+@app.post("/api/local-data/force-refresh", response_model=APIResponse)
+async def force_refresh_data(request: dict):
+    """强制刷新数据（忽略缓存）"""
+    try:
+        symbol = request.get("symbol")
+        data_type = request.get("data_type")
+
+        if not symbol or not data_type:
+            raise HTTPException(status_code=400, detail="缺少 symbol 或 data_type 参数")
+
+        # 验证数据类型
+        try:
+            from .data_manager import DataType
+            dt = DataType(data_type)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"无效的数据类型: {data_type}")
+
+        data_manager = get_data_manager()
+
+        # 准备额外参数
+        kwargs = {}
+        if dt in [DataType.STOCK_DATA, DataType.FUNDAMENTALS]:
+            kwargs["start_date"] = request.get("start_date", "2024-01-01")
+            kwargs["end_date"] = request.get("end_date", "2024-12-31")
+        elif dt == DataType.NEWS:
+            kwargs["start_date"] = request.get("start_date", "2024-01-01")
+            kwargs["end_date"] = request.get("end_date", "2024-12-31")
+
+        success, data = await data_manager.force_refresh_data(symbol, dt, **kwargs)
+
+        if success:
+            return APIResponse(
+                success=True,
+                message=f"强制刷新 {symbol} {data_type} 数据成功",
+                data={"symbol": symbol, "data_type": data_type, "refreshed": True}
+            )
+        else:
+            raise HTTPException(status_code=500, detail="数据刷新失败")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ 强制刷新数据失败: {e}")
+        raise HTTPException(status_code=500, detail=f"强制刷新数据失败: {str(e)}")
+
+
+# ===== 以下是供 task-scheduler 调用的管理接口 =====
+
+from pydantic import BaseModel
+from typing import List
+
+class BatchUpdateRequest(BaseModel):
+    symbols: List[str]
+    data_types: List[str]  # ["stock_info", "stock_data", "fundamentals", "news"]
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+class CacheCleanupRequest(BaseModel):
+    data_types: Optional[List[str]] = None  # 指定清理的数据类型，None表示全部
+    older_than_hours: Optional[int] = 24    # 清理多少小时前的数据
+
+@app.post("/api/admin/batch-update", response_model=APIResponse)
+async def batch_update_data(
+    request: BatchUpdateRequest,
+    redis_client: Optional[redis.Redis] = Depends(get_redis)
+):
+    """批量更新数据 - 供调度器调用"""
+    try:
+        logger.info(f"🔄 批量更新数据: {len(request.symbols)} 只股票, 数据类型: {request.data_types}")
+
+        results = []
+        total_success = 0
+        total_failed = 0
+
+        for symbol in request.symbols:
+            symbol_results = {"symbol": symbol, "updates": []}
+
+            for data_type in request.data_types:
+                try:
+                    if data_type == "stock_info":
+                        # 更新股票信息
+                        info_data = get_china_stock_info_unified(symbol)
+                        if info_data and "错误" not in str(info_data):
+                            # 缓存数据
+                            if redis_client:
+                                cache_key = f"stock_info:{symbol}"
+                                stock_info = {
+                                    "symbol": symbol,
+                                    "name": "股票名称",
+                                    "market": "A股",
+                                    "data": info_data
+                                }
+                                import json
+                                await redis_client.setex(
+                                    cache_key, 3600,
+                                    json.dumps(stock_info, ensure_ascii=False)
+                                )
+                            symbol_results["updates"].append({
+                                "data_type": data_type,
+                                "success": True
+                            })
+                            total_success += 1
+                        else:
+                            symbol_results["updates"].append({
+                                "data_type": data_type,
+                                "success": False,
+                                "error": "数据获取失败"
+                            })
+                            total_failed += 1
+
+                    elif data_type == "stock_data":
+                        # 更新股票数据
+                        start_date = request.start_date or "2025-01-01"
+                        end_date = request.end_date or "2025-01-20"
+
+                        stock_data = get_china_stock_data_unified(symbol, start_date, end_date)
+                        if stock_data and "错误" not in str(stock_data):
+                            # 缓存数据
+                            if redis_client:
+                                cache_key = f"stock_data:{symbol}:{start_date}:{end_date}"
+                                parsed_data = {
+                                    "symbol": symbol,
+                                    "data": stock_data,
+                                    "start_date": start_date,
+                                    "end_date": end_date
+                                }
+                                import json
+                                await redis_client.setex(
+                                    cache_key, 1800,
+                                    json.dumps(parsed_data, ensure_ascii=False)
+                                )
+                            symbol_results["updates"].append({
+                                "data_type": data_type,
+                                "success": True
+                            })
+                            total_success += 1
+                        else:
+                            symbol_results["updates"].append({
+                                "data_type": data_type,
+                                "success": False,
+                                "error": "数据获取失败"
+                            })
+                            total_failed += 1
+
+                    elif data_type == "fundamentals":
+                        # 更新基本面数据
+                        fundamentals_data = get_china_stock_fundamentals_tushare(symbol)
+                        if fundamentals_data and "错误" not in str(fundamentals_data):
+                            # 缓存数据
+                            if redis_client:
+                                from datetime import datetime
+                                curr_date = datetime.now().strftime("%Y-%m-%d")
+                                cache_key = f"fundamentals:{symbol}:{curr_date}"
+                                result_data = {
+                                    "symbol": symbol,
+                                    "data": fundamentals_data,
+                                    "date": curr_date
+                                }
+                                import json
+                                await redis_client.setex(
+                                    cache_key, 3600,
+                                    json.dumps(result_data, ensure_ascii=False)
+                                )
+                            symbol_results["updates"].append({
+                                "data_type": data_type,
+                                "success": True
+                            })
+                            total_success += 1
+                        else:
+                            symbol_results["updates"].append({
+                                "data_type": data_type,
+                                "success": False,
+                                "error": "数据获取失败"
+                            })
+                            total_failed += 1
+
+                    elif data_type == "news":
+                        # 更新新闻数据
+                        try:
+                            from tradingagents.dataflows.realtime_news_utils import get_realtime_stock_news
+                            from datetime import datetime
+                            curr_date = datetime.now().strftime('%Y-%m-%d')
+                            hours_back = 24 * 7
+                            news_data = get_realtime_stock_news(symbol, curr_date, hours_back)
+                        except ImportError:
+                            from datetime import datetime
+                            curr_date = datetime.now().strftime('%Y-%m-%d')
+                            look_back_days = 7
+                            news_data = get_finnhub_news(symbol, curr_date, look_back_days)
+
+                        if news_data and "错误" not in str(news_data):
+                            # 缓存数据
+                            if redis_client:
+                                cache_key = f"news:{symbol}"
+                                result_data = {
+                                    "symbol": symbol,
+                                    "news": news_data
+                                }
+                                import json
+                                await redis_client.setex(
+                                    cache_key, 1800,
+                                    json.dumps(result_data, ensure_ascii=False)
+                                )
+                            symbol_results["updates"].append({
+                                "data_type": data_type,
+                                "success": True
+                            })
+                            total_success += 1
+                        else:
+                            symbol_results["updates"].append({
+                                "data_type": data_type,
+                                "success": False,
+                                "error": "数据获取失败"
+                            })
+                            total_failed += 1
+
+                    # 避免请求过于频繁
+                    import asyncio
+                    await asyncio.sleep(0.5)
+
+                except Exception as e:
+                    logger.warning(f"⚠️ 更新失败: {symbol} - {data_type} - {e}")
+                    symbol_results["updates"].append({
+                        "data_type": data_type,
+                        "success": False,
+                        "error": str(e)
+                    })
+                    total_failed += 1
+
+            results.append(symbol_results)
+
+        return APIResponse(
+            success=True,
+            message=f"批量更新完成: 成功 {total_success}, 失败 {total_failed}",
+            data={
+                "summary": {
+                    "total_symbols": len(request.symbols),
+                    "total_updates": total_success + total_failed,
+                    "successful": total_success,
+                    "failed": total_failed
+                },
+                "details": results
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"❌ 批量更新数据失败: {e}")
+        raise HTTPException(status_code=500, detail=f"批量更新数据失败: {str(e)}")
+
+@app.post("/api/admin/cleanup-cache", response_model=APIResponse)
+async def cleanup_cache(
+    request: CacheCleanupRequest,
+    redis_client: Optional[redis.Redis] = Depends(get_redis)
+):
+    """清理缓存数据 - 供调度器调用"""
+    try:
+        logger.info("🧹 开始清理缓存数据")
+
+        if not redis_client:
+            return APIResponse(
+                success=False,
+                message="Redis 未连接，无法清理缓存"
+            )
+
+        cleaned_count = 0
+
+        # 获取所有缓存键
+        if request.data_types:
+            # 清理指定类型的缓存
+            for data_type in request.data_types:
+                pattern = f"{data_type}:*"
+                keys = await redis_client.keys(pattern)
+                if keys:
+                    deleted = await redis_client.delete(*keys)
+                    cleaned_count += deleted
+                    logger.info(f"清理 {data_type} 缓存: {deleted} 个键")
+        else:
+            # 清理所有数据缓存
+            patterns = ["stock_info:*", "stock_data:*", "fundamentals:*", "news:*"]
+            for pattern in patterns:
+                keys = await redis_client.keys(pattern)
+                if keys:
+                    deleted = await redis_client.delete(*keys)
+                    cleaned_count += deleted
+                    logger.info(f"清理 {pattern} 缓存: {deleted} 个键")
+
+        return APIResponse(
+            success=True,
+            message=f"缓存清理完成，清理了 {cleaned_count} 个缓存项",
+            data={"cleaned_count": cleaned_count}
+        )
+
+    except Exception as e:
+        logger.error(f"❌ 清理缓存失败: {e}")
+        raise HTTPException(status_code=500, detail=f"清理缓存失败: {str(e)}")
+
+@app.get("/api/admin/statistics", response_model=APIResponse)
+async def get_data_statistics(
+    redis_client: Optional[redis.Redis] = Depends(get_redis)
+):
+    """获取数据统计信息 - 供调度器调用"""
+    try:
+        stats = {}
+
+        if redis_client:
+            # Redis 统计
+            info = await redis_client.info()
+            stats["redis"] = {
+                "used_memory": info.get("used_memory_human", "N/A"),
+                "connected_clients": info.get("connected_clients", 0),
+                "total_commands_processed": info.get("total_commands_processed", 0)
+            }
+
+            # 缓存数据统计
+            cache_stats = {}
+            data_types = ["stock_info", "stock_data", "fundamentals", "news"]
+            for data_type in data_types:
+                pattern = f"{data_type}:*"
+                keys = await redis_client.keys(pattern)
+                cache_stats[data_type] = len(keys)
+
+            stats["cache_counts"] = cache_stats
+        else:
+            stats["redis"] = "not_connected"
+
+        # MongoDB 统计（如果连接）
+        if db_manager and db_manager.is_connected():
+            # 这里可以添加 MongoDB 统计信息
+            stats["mongodb"] = {
+                "status": "connected",
+                "collections": []  # 可以添加集合统计
+            }
+        else:
+            stats["mongodb"] = "not_connected"
+
+        return APIResponse(
+            success=True,
+            message="数据统计获取成功",
+            data=stats
+        )
+
+    except Exception as e:
+        logger.error(f"❌ 获取数据统计失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取数据统计失败: {str(e)}")
+
+@app.post("/api/admin/preheat-cache", response_model=APIResponse)
+async def preheat_cache(
+    symbols: List[str],
+    redis_client: Optional[redis.Redis] = Depends(get_redis)
+):
+    """预热缓存 - 供调度器调用"""
+    try:
+        logger.info(f"🔥 开始预热缓存: {len(symbols)} 只股票")
+
+        preheated_count = 0
+
+        for symbol in symbols:
+            try:
+                # 预热股票信息
+                info_data = get_china_stock_info_unified(symbol)
+                if info_data and "错误" not in str(info_data) and redis_client:
+                    cache_key = f"stock_info:{symbol}"
+                    stock_info = {
+                        "symbol": symbol,
+                        "name": "股票名称",
+                        "market": "A股",
+                        "data": info_data
+                    }
+                    import json
+                    await redis_client.setex(
+                        cache_key, 3600,
+                        json.dumps(stock_info, ensure_ascii=False)
+                    )
+                    preheated_count += 1
+
+                # 避免请求过于频繁
+                import asyncio
+                await asyncio.sleep(1)
+
+            except Exception as e:
+                logger.warning(f"⚠️ 预热失败: {symbol} - {e}")
+
+        return APIResponse(
+            success=True,
+            message=f"缓存预热完成: {preheated_count} 只股票",
+            data={"preheated_count": preheated_count}
+        )
+
+    except Exception as e:
+        logger.error(f"❌ 缓存预热失败: {e}")
+        raise HTTPException(status_code=500, detail=f"缓存预热失败: {str(e)}")
+
+
+# ===== 增强数据接口 =====
+
+@app.get("/api/enhanced/stock/{symbol}", response_model=APIResponse)
+async def get_enhanced_stock_data(
+    symbol: str,
+    start_date: str = "2024-12-01",
+    end_date: str = "2024-12-31",
+    force_refresh: bool = False,
+    clear_all_cache: bool = False
+):
+    """
+    获取增强的股票数据 - 集成TradingAgents优秀实现
+
+    Args:
+        symbol: 股票代码 (如: AAPL, 000858, 00700)
+        start_date: 开始日期
+        end_date: 结束日期
+        force_refresh: 是否强制刷新缓存
+        clear_all_cache: 是否清除所有缓存（包括数据源缓存）
+    """
+    try:
+        # Debug: 记录API调用
+        debug_logger.debug_api_request_received("GET", f"/api/enhanced/stock/{symbol}")
+        debug_logger.debug_validation_start("symbol")
+
+        if not symbol or len(symbol.strip()) == 0:
+            debug_logger.debug_validation_failed("symbol", "empty_or_invalid")
+            raise HTTPException(status_code=400, detail="股票代码不能为空")
+
+        debug_logger.debug_validation_passed("symbol")
+
+        # 获取增强数据管理器
+        enhanced_manager = get_enhanced_data_manager()
+
+        # 如果需要清除所有缓存，先清除数据源缓存
+        if clear_all_cache:
+            try:
+                # 清除数据源工厂的缓存
+                from .datasources.factory import get_data_source_factory
+                factory = get_data_source_factory()
+                # 这里可以添加清除数据源缓存的逻辑
+                logger.info(f"🗑️ 清除所有缓存: {symbol}")
+                force_refresh = True  # 同时强制刷新
+            except Exception as e:
+                logger.warning(f"⚠️ 清除缓存失败: {e}")
+
+        # 获取增强股票数据
+        result = await enhanced_manager.get_enhanced_stock_data(
+            symbol=symbol.upper(),
+            start_date=start_date,
+            end_date=end_date,
+            force_refresh=force_refresh
+        )
+
+        debug_logger.debug_api_response_prepared(200)
+
+        # 使用国际化响应
+        return i18n_response.success_response("api.success.enhanced_stock_data", result)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        debug_logger.debug("log.debug.api.internal_error", symbol=symbol, error=str(e))
+        logger.error(f"❌ 获取增强股票数据失败: {symbol} - {e}")
+        raise HTTPException(status_code=500, detail=f"获取增强股票数据失败: {str(e)}")
+
+
+@app.get("/api/enhanced/stock/{symbol}/formatted")
+async def get_enhanced_stock_data_formatted(
+    symbol: str,
+    start_date: str = "2024-12-01",
+    end_date: str = "2024-12-31",
+    force_refresh: bool = False
+):
+    """
+    获取增强的股票数据 - 返回格式化的文本数据 (TradingAgents风格)
+    """
+    try:
+        # 获取增强数据管理器
+        enhanced_manager = get_enhanced_data_manager()
+
+        # 获取增强股票数据
+        result = await enhanced_manager.get_enhanced_stock_data(
+            symbol=symbol.upper(),
+            start_date=start_date,
+            end_date=end_date,
+            force_refresh=force_refresh
+        )
+
+        # 返回格式化的文本数据
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(
+            content=result.get("formatted_data", "数据获取失败"),
+            media_type="text/plain; charset=utf-8"
+        )
+
+    except Exception as e:
+        logger.error(f"❌ 获取格式化股票数据失败: {symbol} - {e}")
+        return PlainTextResponse(
+            content=f"❌ 获取股票数据失败: {str(e)}",
+            media_type="text/plain; charset=utf-8"
+        )
+
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     config = get_service_config("data_service")
     uvicorn.run(
         "main:app",

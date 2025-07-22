@@ -1,20 +1,70 @@
 """
-数据同步相关的定时任务
+数据同步相关的定时任务 - 调用微服务接口
 """
 import sys
 import os
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import asyncio
+import httpx
 
 # 添加项目路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 from celery import current_task
 from tasks.celery_app import celery_app
-# 暂时使用简单的日志记录
 import logging
+
 logger = logging.getLogger(__name__)
+
+# 服务端点配置
+SERVICE_URLS = {
+    "data_service": os.getenv("DATA_SERVICE_URL", "http://localhost:8002"),
+    "analysis_engine": os.getenv("ANALYSIS_ENGINE_URL", "http://localhost:8001")
+}
+
+class ServiceClient:
+    """微服务客户端"""
+
+    def __init__(self):
+        self.timeout = httpx.Timeout(30.0)
+
+    async def call_service(self, service: str, endpoint: str, method: str = "GET", data: Optional[Dict] = None) -> Dict[str, Any]:
+        """调用微服务接口"""
+        try:
+            base_url = SERVICE_URLS.get(service)
+            if not base_url:
+                raise ValueError(f"未知服务: {service}")
+
+            url = f"{base_url}{endpoint}"
+
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                if method.upper() == "GET":
+                    response = await client.get(url)
+                elif method.upper() == "POST":
+                    response = await client.post(url, json=data)
+                else:
+                    raise ValueError(f"不支持的HTTP方法: {method}")
+
+                response.raise_for_status()
+                return response.json()
+
+        except Exception as e:
+            logger.error(f"调用服务失败: {service} {endpoint} - {e}")
+            raise
+
+# 全局客户端实例
+service_client = ServiceClient()
+
+def run_async_task(coro):
+    """运行异步任务的辅助函数"""
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    return loop.run_until_complete(coro)
 
 # 导入数据库访问层
 try:
@@ -73,103 +123,73 @@ def run_async_task(coro):
 @celery_app.task(bind=True, name='tasks.data_tasks.sync_daily_stock_data')
 def sync_daily_stock_data(self, symbols: List[str] = None, date: str = None):
     """
-    同步每日股票数据
-    
+    同步每日股票数据 - 调用 data-service 接口
+
     Args:
-        symbols: 股票代码列表，为空则同步所有股票
+        symbols: 股票代码列表，为空则同步热门股票
         date: 指定日期，为空则使用昨日
     """
     task_id = self.request.id
     logger.info(f"🚀 开始同步每日股票数据 - 任务ID: {task_id}")
-    
+
     try:
         # 设置默认参数
         if date is None:
-            # 获取上一个交易日
             target_date = datetime.now() - timedelta(days=1)
-            date = target_date.strftime('%Y-%m-%d')
-        
+            end_date = target_date.strftime('%Y-%m-%d')
+            start_date = end_date
+        else:
+            start_date = date
+            end_date = date
+
         if symbols is None:
-            # 获取所有A股代码（这里简化处理）
-            symbols = ['000001', '000002', '600519', '000858']  # 示例股票
-        
-        logger.info(f"📊 同步参数: 日期={date}, 股票数量={len(symbols)}")
-        
+            # 热门股票列表
+            symbols = ['000858', '000001', '000002', '600036', '600519', '000725']
+
+        logger.info(f"📊 同步参数: 日期={start_date}, 股票数量={len(symbols)}")
+
         # 更新任务状态
         self.update_state(
             state='PROGRESS',
             meta={'current': 0, 'total': len(symbols), 'status': '开始同步数据'}
         )
-        
+
         async def sync_data():
-            db_manager = await get_async_db_manager()
-            stock_repo = await get_async_stock_repository()
-            
-            success_count = 0
-            error_count = 0
-            
-            for i, symbol in enumerate(symbols):
-                try:
-                    logger.info(f"📈 同步股票数据: {symbol}")
-                    
-                    # 获取股票数据
-                    start_date = date
-                    end_date = date
-                    
-                    stock_data = get_china_stock_data_unified(symbol, start_date, end_date)
-                    
-                    if stock_data and "错误" not in str(stock_data):
-                        # 解析并保存数据（这里需要根据实际数据格式调整）
-                        parsed_data = [{
-                            'trade_date': datetime.strptime(date, '%Y-%m-%d'),
-                            'open': 100.0,  # 从stock_data解析
-                            'high': 105.0,
-                            'low': 98.0,
-                            'close': 102.0,
-                            'volume': 1000000,
-                            'amount': 102000000.0
-                        }]
-                        
-                        await stock_repo.save_stock_daily_data(symbol, parsed_data)
-                        success_count += 1
-                        logger.info(f"✅ {symbol} 数据同步成功")
-                    else:
-                        error_count += 1
-                        logger.warning(f"⚠️ {symbol} 数据获取失败: {stock_data}")
-                    
-                    # 更新进度
-                    self.update_state(
-                        state='PROGRESS',
-                        meta={
-                            'current': i + 1,
-                            'total': len(symbols),
-                            'status': f'已处理 {i + 1}/{len(symbols)} 只股票',
-                            'success': success_count,
-                            'errors': error_count
-                        }
-                    )
-                    
-                except Exception as e:
-                    error_count += 1
-                    logger.error(f"❌ {symbol} 同步失败: {e}")
-            
-            await db_manager.disconnect()
-            return success_count, error_count
-        
+            # 调用 data-service 批量更新接口
+            result = await service_client.call_service(
+                "data_service",
+                "/api/admin/batch-update",
+                "POST",
+                {
+                    "symbols": symbols,
+                    "data_types": ["stock_info", "stock_data"],
+                    "start_date": start_date,
+                    "end_date": end_date
+                }
+            )
+            return result
+
         # 执行异步任务
-        success_count, error_count = run_async_task(sync_data())
-        
-        result = {
-            'date': date,
-            'total_symbols': len(symbols),
-            'success_count': success_count,
-            'error_count': error_count,
-            'completion_time': datetime.now().isoformat()
-        }
-        
-        logger.info(f"✅ 每日股票数据同步完成: 成功{success_count}个, 失败{error_count}个")
-        return result
-        
+        result = run_async_task(sync_data())
+
+        if result.get("success"):
+            data = result.get("data", {})
+            summary = data.get("summary", {})
+
+            response = {
+                'date': start_date,
+                'total_symbols': len(symbols),
+                'success_count': summary.get("successful", 0),
+                'error_count': summary.get("failed", 0),
+                'completion_time': datetime.now().isoformat(),
+                'details': data.get("details", [])
+            }
+
+            logger.info(f"✅ 每日股票数据同步完成: 成功{summary.get('successful', 0)}个, 失败{summary.get('failed', 0)}个")
+            return response
+        else:
+            raise Exception(f"数据同步失败: {result.get('message', 'Unknown error')}")
+
     except Exception as e:
         logger.error(f"❌ 每日股票数据同步失败: {e}")
         self.update_state(
@@ -178,170 +198,278 @@ def sync_daily_stock_data(self, symbols: List[str] = None, date: str = None):
         )
         raise
 
-
-@celery_app.task(bind=True, name='tasks.data_tasks.update_realtime_prices')
-def update_realtime_prices(self, symbols: List[str] = None):
-    """
-    更新实时股价
-    
-    Args:
-        symbols: 股票代码列表
-    """
+@celery_app.task(bind=True, name='tasks.data_tasks.update_hot_stocks_data')
+def update_hot_stocks_data(self):
+    """更新热门股票数据"""
     task_id = self.request.id
-    logger.info(f"⚡ 开始更新实时股价 - 任务ID: {task_id}")
-    
+    logger.info(f"🔄 开始更新热门股票数据 - 任务ID: {task_id}")
+
     try:
-        # 检查是否在交易时间
-        now = datetime.now()
-        if now.hour < 9 or now.hour > 15:
-            logger.info("⏰ 非交易时间，跳过实时价格更新")
-            return {'status': 'skipped', 'reason': '非交易时间'}
-        
-        if symbols is None:
-            symbols = ['000001', '000002', '600519', '000858']  # 热门股票
-        
-        async def update_prices():
-            # 这里实现实时价格更新逻辑
-            # 可以调用实时数据API，更新Redis缓存
-            updated_count = 0
-            
-            for symbol in symbols:
-                try:
-                    # 获取实时价格（模拟）
-                    current_price = 100.0  # 从API获取
-                    
-                    # 更新缓存
-                    # await redis_client.setex(f"price:{symbol}", 300, current_price)
-                    
-                    updated_count += 1
-                    logger.debug(f"📊 更新 {symbol} 实时价格: {current_price}")
-                    
-                except Exception as e:
-                    logger.error(f"❌ 更新 {symbol} 实时价格失败: {e}")
-            
-            return updated_count
-        
-        updated_count = run_async_task(update_prices())
-        
-        result = {
-            'updated_count': updated_count,
-            'total_symbols': len(symbols),
-            'update_time': datetime.now().isoformat()
+        # 热门股票列表
+        hot_stocks = {
+            "A股": ["000858", "000001", "000002", "600036", "600519", "000725"],
+            "美股": ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA"],
+            "港股": ["00700", "09988", "03690", "00941", "02318", "01024"]
         }
-        
-        logger.info(f"✅ 实时股价更新完成: {updated_count}/{len(symbols)}")
-        return result
-        
+
+        # 准备批量更新请求
+        all_symbols = []
+        for market, symbols in hot_stocks.items():
+            all_symbols.extend(symbols[:3])  # 每个市场取前3只
+
+        # 设置日期范围
+        end_date = datetime.now().strftime("%Y-%m-%d")
+        start_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+        async def update_data():
+            return await service_client.call_service(
+                "data_service",
+                "/api/admin/batch-update",
+                "POST",
+                {
+                    "symbols": all_symbols,
+                    "data_types": ["stock_info", "stock_data"],
+                    "start_date": start_date,
+                    "end_date": end_date
+                }
+            )
+
+        # 运行异步任务
+        result = run_async_task(update_data())
+
+        logger.info(f"✅ 热门股票数据更新完成: {result.get('message', 'Unknown')}")
+
+        return {
+            "task_id": task_id,
+            "status": "completed",
+            "symbols_count": len(all_symbols),
+            "result": result,
+            "timestamp": datetime.now().isoformat()
+        }
+
     except Exception as e:
-        logger.error(f"❌ 实时股价更新失败: {e}")
+        logger.error(f"❌ 更新热门股票数据失败: {e}")
         raise
 
 
-@celery_app.task(bind=True, name='tasks.data_tasks.sync_financial_data')
-def sync_financial_data(self, symbols: List[str] = None):
-    """
-    同步财务数据
-    
-    Args:
-        symbols: 股票代码列表
-    """
+@celery_app.task(bind=True, name='tasks.data_tasks.update_news_data')
+def update_news_data(self):
+    """更新新闻数据"""
     task_id = self.request.id
-    logger.info(f"💰 开始同步财务数据 - 任务ID: {task_id}")
-    
+    logger.info(f"📰 开始更新新闻数据 - 任务ID: {task_id}")
+
     try:
-        if symbols is None:
-            symbols = ['000001', '000002', '600519', '000858']
-        
-        async def sync_financials():
-            success_count = 0
-            
-            for symbol in symbols:
-                try:
-                    # 获取财务数据
-                    current_date = datetime.now().strftime('%Y-%m-%d')
-                    start_date = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
-                    
-                    financial_data = get_stock_fundamentals_unified(
-                        symbol, start_date, current_date, current_date
-                    )
-                    
-                    if financial_data and "错误" not in str(financial_data):
-                        # 保存财务数据到数据库
-                        success_count += 1
-                        logger.info(f"✅ {symbol} 财务数据同步成功")
-                    else:
-                        logger.warning(f"⚠️ {symbol} 财务数据获取失败")
-                        
-                except Exception as e:
-                    logger.error(f"❌ {symbol} 财务数据同步失败: {e}")
-            
-            return success_count
-        
-        success_count = run_async_task(sync_financials())
-        
-        result = {
-            'success_count': success_count,
-            'total_symbols': len(symbols),
-            'sync_time': datetime.now().isoformat()
+        # 主要关注美股新闻
+        news_symbols = ["AAPL", "MSFT", "GOOGL"]
+
+        async def update_data():
+            return await service_client.call_service(
+                "data_service",
+                "/api/admin/batch-update",
+                "POST",
+                {
+                    "symbols": news_symbols,
+                    "data_types": ["news"]
+                }
+            )
+
+        result = run_async_task(update_data())
+
+        logger.info(f"✅ 新闻数据更新完成: {result.get('message', 'Unknown')}")
+
+        return {
+            "task_id": task_id,
+            "status": "completed",
+            "symbols_count": len(news_symbols),
+            "result": result,
+            "timestamp": datetime.now().isoformat()
         }
-        
-        logger.info(f"✅ 财务数据同步完成: {success_count}/{len(symbols)}")
-        return result
-        
+
     except Exception as e:
-        logger.error(f"❌ 财务数据同步失败: {e}")
+        logger.error(f"❌ 更新新闻数据失败: {e}")
+        raise
+
+@celery_app.task(bind=True, name='tasks.data_tasks.preheat_cache')
+def preheat_cache(self):
+    """数据预热"""
+    task_id = self.request.id
+    logger.info(f"🔥 开始数据预热 - 任务ID: {task_id}")
+
+    try:
+        # 预热股票列表
+        preheat_symbols = ["000858", "000001", "AAPL", "MSFT"]
+
+        async def preheat_data():
+            return await service_client.call_service(
+                "data_service",
+                "/api/admin/preheat-cache",
+                "POST",
+                preheat_symbols
+            )
+
+        result = run_async_task(preheat_data())
+
+        logger.info(f"✅ 数据预热完成: {result.get('message', 'Unknown')}")
+
+        return {
+            "task_id": task_id,
+            "status": "completed",
+            "symbols_count": len(preheat_symbols),
+            "result": result,
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"❌ 数据预热失败: {e}")
+        raise
+
+@celery_app.task(bind=True, name='tasks.data_tasks.cleanup_expired_data')
+def cleanup_expired_data(self):
+    """清理过期数据"""
+    task_id = self.request.id
+    logger.info(f"🧹 开始清理过期数据 - 任务ID: {task_id}")
+
+    try:
+        async def cleanup_data():
+            return await service_client.call_service(
+                "data_service",
+                "/api/admin/cleanup-cache",
+                "POST",
+                {
+                    "data_types": None,  # 清理所有类型
+                    "older_than_hours": 24
+                }
+            )
+
+        result = run_async_task(cleanup_data())
+
+        logger.info(f"✅ 过期数据清理完成: {result.get('message', 'Unknown')}")
+
+        return {
+            "task_id": task_id,
+            "status": "completed",
+            "result": result,
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"❌ 清理过期数据失败: {e}")
         raise
 
 
-@celery_app.task(bind=True, name='tasks.data_tasks.fetch_news_data')
-def fetch_news_data(self, symbols: List[str] = None, limit: int = 50):
-    """
-    抓取新闻数据
-    
-    Args:
-        symbols: 股票代码列表
-        limit: 每只股票的新闻数量限制
-    """
+@celery_app.task(bind=True, name='tasks.data_tasks.update_fundamentals_data')
+def update_fundamentals_data(self):
+    """更新基本面数据"""
     task_id = self.request.id
-    logger.info(f"📰 开始抓取新闻数据 - 任务ID: {task_id}")
-    
+    logger.info(f"📊 开始更新基本面数据 - 任务ID: {task_id}")
+
     try:
-        if symbols is None:
-            symbols = ['000001', '000002', '600519', '000858']
-        
-        async def fetch_news():
-            total_news = 0
-            
-            for symbol in symbols:
-                try:
-                    # 获取新闻数据
-                    news_data = get_stock_news_unified(symbol)
-                    
-                    if news_data and "错误" not in str(news_data):
-                        # 解析并保存新闻数据
-                        # 这里需要根据实际数据格式进行解析
-                        news_count = 10  # 模拟新闻数量
-                        total_news += news_count
-                        logger.info(f"✅ {symbol} 新闻数据抓取成功: {news_count}条")
-                    else:
-                        logger.warning(f"⚠️ {symbol} 新闻数据获取失败")
-                        
-                except Exception as e:
-                    logger.error(f"❌ {symbol} 新闻数据抓取失败: {e}")
-            
-            return total_news
-        
-        total_news = run_async_task(fetch_news())
-        
-        result = {
-            'total_news': total_news,
-            'symbols_count': len(symbols),
-            'fetch_time': datetime.now().isoformat()
+        # 主要更新A股基本面数据
+        symbols = ["000858", "000001", "600036"]
+
+        # 设置日期范围
+        end_date = datetime.now().strftime("%Y-%m-%d")
+        start_date = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
+
+        async def update_data():
+            return await service_client.call_service(
+                "data_service",
+                "/api/admin/batch-update",
+                "POST",
+                {
+                    "symbols": symbols,
+                    "data_types": ["fundamentals"],
+                    "start_date": start_date,
+                    "end_date": end_date
+                }
+            )
+
+        result = run_async_task(update_data())
+
+        logger.info(f"✅ 基本面数据更新完成: {result.get('message', 'Unknown')}")
+
+        return {
+            "task_id": task_id,
+            "status": "completed",
+            "symbols_count": len(symbols),
+            "result": result,
+            "timestamp": datetime.now().isoformat()
         }
-        
-        logger.info(f"✅ 新闻数据抓取完成: 共{total_news}条新闻")
-        return result
-        
+
     except Exception as e:
-        logger.error(f"❌ 新闻数据抓取失败: {e}")
+        logger.error(f"❌ 更新基本面数据失败: {e}")
+        raise
+
+@celery_app.task(bind=True, name='tasks.data_tasks.generate_data_report')
+def generate_data_report(self):
+    """生成数据统计报告"""
+    task_id = self.request.id
+    logger.info(f"📋 开始生成数据报告 - 任务ID: {task_id}")
+
+    try:
+        async def get_statistics():
+            return await service_client.call_service(
+                "data_service",
+                "/api/admin/statistics",
+                "GET"
+            )
+
+        result = run_async_task(get_statistics())
+
+        # 这里可以将统计结果保存到数据库或发送报告
+        logger.info(f"✅ 数据报告生成完成")
+
+        return {
+            "task_id": task_id,
+            "status": "completed",
+            "statistics": result.get("data", {}),
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"❌ 生成数据报告失败: {e}")
+        raise
+
+# 自定义任务：批量更新指定股票数据
+@celery_app.task(bind=True, name='tasks.data_tasks.update_custom_stocks_data')
+def update_custom_stocks_data(self, symbols: List[str], data_types: List[str], start_date: str = None, end_date: str = None):
+    """自定义批量更新股票数据"""
+    task_id = self.request.id
+    logger.info(f"🔄 开始自定义更新 - 任务ID: {task_id}: {len(symbols)} 只股票, 数据类型: {data_types}")
+
+    try:
+        # 设置默认日期
+        if not end_date:
+            end_date = datetime.now().strftime("%Y-%m-%d")
+        if not start_date:
+            start_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+
+        async def update_data():
+            return await service_client.call_service(
+                "data_service",
+                "/api/admin/batch-update",
+                "POST",
+                {
+                    "symbols": symbols,
+                    "data_types": data_types,
+                    "start_date": start_date,
+                    "end_date": end_date
+                }
+            )
+
+        result = run_async_task(update_data())
+
+        logger.info(f"✅ 自定义更新完成: {result.get('message', 'Unknown')}")
+
+        return {
+            "task_id": task_id,
+            "status": "completed",
+            "symbols_count": len(symbols),
+            "data_types": data_types,
+            "result": result,
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"❌ 自定义更新失败: {e}")
         raise
