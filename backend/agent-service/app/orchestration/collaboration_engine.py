@@ -324,30 +324,106 @@ class CollaborationEngine:
     async def _create_agent_task(self, agent_type: str, context: Dict[str, Any]):
         """创建智能体任务"""
         try:
-            # 这里应该调用智能体管理器执行任务
-            # 暂时返回模拟结果
-            await asyncio.sleep(0.1)  # 模拟执行时间
-            
+            # 将字符串类型转换为AgentType枚举
+            agent_type_mapping = {
+                "fundamentals_analyst": "FUNDAMENTALS_ANALYST",
+                "market_analyst": "MARKET_ANALYST",
+                "news_analyst": "NEWS_ANALYST",
+                "social_media_analyst": "SOCIAL_MEDIA_ANALYST",
+                "bull_researcher": "BULL_RESEARCHER",
+                "bear_researcher": "BEAR_RESEARCHER",
+                "research_manager": "RESEARCH_MANAGER",
+                "risk_manager": "RISK_MANAGER",
+                "trader": "TRADER",
+                "risky_debator": "RISKY_DEBATOR",
+                "safe_debator": "SAFE_DEBATOR",
+                "neutral_debator": "NEUTRAL_DEBATOR"
+            }
+
+            from ..agents.base_agent import AgentType, TaskContext
+
+            # 获取对应的AgentType
+            agent_type_enum_name = agent_type_mapping.get(agent_type)
+            if not agent_type_enum_name:
+                raise ValueError(f"未知的智能体类型: {agent_type}")
+
+            agent_type_enum = getattr(AgentType, agent_type_enum_name)
+
+            # 创建任务上下文
+            task_context = TaskContext(
+                task_id=f"collab_{agent_type}_{datetime.now().timestamp()}",
+                symbol=context.get("symbol", "UNKNOWN"),
+                company_name=context.get("company_name", "Unknown Company"),
+                market=context.get("market", "US"),
+                analysis_date=context.get("analysis_date", datetime.now().strftime("%Y-%m-%d")),
+                parameters=context.get("parameters", {}),
+                metadata={"collaboration": True, "agent_type": agent_type}
+            )
+
+            # 调用智能体管理器执行任务
+            task_type = self._get_task_type_for_agent(agent_type)
+            result = await self.agent_manager.execute_task(
+                agent_type=agent_type_enum,
+                task_type=task_type,
+                context=task_context
+            )
+
             return {
                 "agent_type": agent_type,
-                "status": "completed",
-                "result": f"{agent_type} analysis result",
-                "timestamp": datetime.now().isoformat()
+                "agent_id": result.agent_id,
+                "status": result.status,
+                "result": result.result,
+                "duration": result.duration,
+                "timestamp": result.timestamp.isoformat()
             }
-            
+
         except Exception as e:
             logger.error(f"❌ 创建智能体任务失败: {agent_type} - {e}")
-            raise
+            # 返回错误结果而不是抛出异常，以便协作可以继续
+            return {
+                "agent_type": agent_type,
+                "status": "failed",
+                "result": {},
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+
+    def _get_task_type_for_agent(self, agent_type: str) -> str:
+        """根据智能体类型获取任务类型"""
+        task_mapping = {
+            "fundamentals_analyst": "fundamentals_analysis",
+            "market_analyst": "technical_analysis",
+            "news_analyst": "news_analysis",
+            "social_media_analyst": "sentiment_analysis",
+            "bull_researcher": "bull_research",
+            "bear_researcher": "bear_research",
+            "research_manager": "research_management",
+            "risk_manager": "risk_assessment",
+            "trader": "trading_decision",
+            "risky_debator": "debate_participation",
+            "safe_debator": "debate_participation",
+            "neutral_debator": "debate_participation"
+        }
+        return task_mapping.get(agent_type, "general_analysis")
     
     async def _simple_consensus(self, viewpoints: Dict[str, Any]) -> Dict[str, Any]:
         """简化的共识算法"""
         try:
             # 简单的投票机制
             recommendations = []
-            for agent_type, result in viewpoints.items():
-                if "recommendation" in result:
+            for agent_id, result in viewpoints.items():
+                if isinstance(result, dict) and "recommendation" in result:
                     recommendations.append(result["recommendation"])
-            
+                elif isinstance(result, dict) and "result" in result and isinstance(result["result"], dict):
+                    # 从嵌套的result中提取recommendation
+                    nested_result = result["result"]
+                    if "recommendation" in nested_result:
+                        recommendations.append(nested_result["recommendation"])
+                    elif "investment_recommendation" in nested_result:
+                        inv_rec = nested_result["investment_recommendation"]
+                        if isinstance(inv_rec, dict) and "recommendation" in inv_rec:
+                            recommendations.append(inv_rec["recommendation"])
+
             # 统计最多的建议
             if recommendations:
                 consensus_recommendation = max(set(recommendations), key=recommendations.count)
@@ -355,13 +431,14 @@ class CollaborationEngine:
             else:
                 consensus_recommendation = "hold"
                 confidence = 0.5
-            
+
             return {
                 "recommendation": consensus_recommendation,
                 "confidence": confidence,
-                "participating_agents": list(viewpoints.keys())
+                "participating_agents": list(viewpoints.keys()),
+                "vote_distribution": {rec: recommendations.count(rec) for rec in set(recommendations)}
             }
-            
+
         except Exception as e:
             logger.error(f"❌ 共识算法失败: {e}")
             return {"recommendation": "hold", "confidence": 0.0}

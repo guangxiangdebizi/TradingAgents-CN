@@ -34,8 +34,10 @@ Agent Service采用微服务架构，包含以下核心组件：
 - **CollaborationEngine**: 协作引擎，负责智能体间的协作编排
 - **DebateEngine**: 辩论引擎，负责智能体间的辩论协调
 - **ConsensusAlgorithm**: 共识算法，负责智能体间的共识达成
+- **WorkflowManager**: 工作流管理器，负责复杂工作流的定义和执行
 - **StateManager**: 状态管理器，负责状态持久化和同步
 - **MessageRouter**: 消息路由器，负责智能体间的消息传递
+- **PerformanceMonitor**: 性能监控器，负责系统和智能体性能监控
 
 ## 🚀 快速开始
 
@@ -96,17 +98,26 @@ DELETE /api/v1/agents/{agent_id}
 GET /api/v1/agents/system/status
 ```
 
-### 任务执行
+### 任务管理
 
 ```bash
-# 执行智能体任务
-POST /api/v1/agents/execute
+# 创建任务
+POST /api/v1/tasks/
 
-# 获取智能体状态
-GET /api/v1/agents/{agent_id}/status
+# 获取任务状态
+GET /api/v1/tasks/{task_id}
 
-# 智能体健康检查
-POST /api/v1/agents/{agent_id}/health-check
+# 创建批量任务
+POST /api/v1/tasks/batch
+
+# 搜索任务
+POST /api/v1/tasks/search
+
+# 取消任务
+POST /api/v1/tasks/{task_id}/cancel
+
+# 重试任务
+POST /api/v1/tasks/{task_id}/retry
 ```
 
 ### 协作和辩论
@@ -123,6 +134,47 @@ POST /api/v1/debate/start
 
 # 获取辩论状态
 GET /api/v1/debate/{debate_id}/status
+
+# 达成共识
+POST /api/v1/debate/consensus
+```
+
+### 工作流管理
+
+```bash
+# 启动工作流
+POST /api/v1/workflows/start
+
+# 获取工作流执行状态
+GET /api/v1/workflows/executions/{execution_id}/status
+
+# 获取工作流定义
+GET /api/v1/workflows/definitions
+
+# 验证工作流上下文
+POST /api/v1/workflows/validate
+
+# 取消工作流执行
+POST /api/v1/workflows/executions/{execution_id}/cancel
+```
+
+### 性能监控
+
+```bash
+# 获取系统性能指标
+GET /api/v1/monitoring/system/metrics
+
+# 获取智能体性能指标
+GET /api/v1/monitoring/agents/metrics
+
+# 获取性能摘要
+GET /api/v1/monitoring/summary
+
+# 获取性能告警
+GET /api/v1/monitoring/alerts
+
+# 获取监控仪表盘
+GET /api/v1/monitoring/dashboard
 ```
 
 ## 🧪 测试

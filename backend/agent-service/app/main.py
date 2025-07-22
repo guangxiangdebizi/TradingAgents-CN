@@ -31,6 +31,8 @@ from .models.agent_models import AgentRequest, AgentResponse, DebateRequest, Deb
 from .models.task_models import TaskRequest, TaskResponse, TaskStatus
 from .utils.state_manager import StateManager
 from .utils.message_router import MessageRouter
+from .utils.performance_monitor import PerformanceMonitor
+from .orchestration.workflow_manager import WorkflowManager
 
 logger = get_logger("agent-service")
 settings = get_settings()
@@ -42,13 +44,15 @@ debate_engine: Optional[DebateEngine] = None
 consensus_algorithm: Optional[ConsensusAlgorithm] = None
 state_manager: Optional[StateManager] = None
 message_router: Optional[MessageRouter] = None
+workflow_manager: Optional[WorkflowManager] = None
+performance_monitor: Optional[PerformanceMonitor] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     global agent_manager, collaboration_engine, debate_engine, consensus_algorithm
-    global state_manager, message_router
+    global state_manager, message_router, workflow_manager, performance_monitor
     
     logger.info("🚀 启动Agent Service...")
     
@@ -86,7 +90,17 @@ async def lifespan(app: FastAPI):
             agent_manager, state_manager
         )
         await consensus_algorithm.initialize()
-        
+
+        # 初始化工作流管理器
+        workflow_manager = WorkflowManager(
+            agent_manager, state_manager, collaboration_engine
+        )
+        await workflow_manager.initialize()
+
+        # 初始化性能监控器
+        performance_monitor = PerformanceMonitor(state_manager)
+        await performance_monitor.initialize()
+
         logger.info("✅ Agent Service启动完成")
         
         yield
@@ -98,6 +112,10 @@ async def lifespan(app: FastAPI):
         logger.info("🔄 关闭Agent Service...")
         
         # 清理资源
+        if performance_monitor:
+            await performance_monitor.cleanup()
+        if workflow_manager:
+            await workflow_manager.cleanup()
         if consensus_algorithm:
             await consensus_algorithm.cleanup()
         if debate_engine:
@@ -157,6 +175,18 @@ def get_consensus_algorithm() -> ConsensusAlgorithm:
     return consensus_algorithm
 
 
+def get_workflow_manager() -> WorkflowManager:
+    if workflow_manager is None:
+        raise HTTPException(status_code=503, detail="Workflow Manager未初始化")
+    return workflow_manager
+
+
+def get_performance_monitor() -> PerformanceMonitor:
+    if performance_monitor is None:
+        raise HTTPException(status_code=503, detail="Performance Monitor未初始化")
+    return performance_monitor
+
+
 @app.get("/")
 async def root():
     """根路径"""
@@ -179,7 +209,9 @@ async def health_check():
             "debate_engine": debate_engine is not None and await debate_engine.health_check(),
             "consensus_algorithm": consensus_algorithm is not None and await consensus_algorithm.health_check(),
             "state_manager": state_manager is not None and await state_manager.health_check(),
-            "message_router": message_router is not None and await message_router.health_check()
+            "message_router": message_router is not None and await message_router.health_check(),
+            "workflow_manager": workflow_manager is not None and await workflow_manager.health_check(),
+            "performance_monitor": performance_monitor is not None and await performance_monitor.health_check()
         }
 
         all_healthy = all(components_status.values())
@@ -206,11 +238,15 @@ from .api.agents_api import router as agents_router
 from .api.tasks_api import router as tasks_router
 from .api.collaboration_api import router as collaboration_router
 from .api.debate_api import router as debate_router
+from .api.workflow_api import router as workflow_router
+from .api.monitoring_api import router as monitoring_router
 
 app.include_router(agents_router, prefix="/api/v1/agents", tags=["agents"])
 app.include_router(tasks_router, prefix="/api/v1/tasks", tags=["tasks"])
 app.include_router(collaboration_router, prefix="/api/v1/collaboration", tags=["collaboration"])
 app.include_router(debate_router, prefix="/api/v1/debate", tags=["debate"])
+app.include_router(workflow_router, prefix="/api/v1/workflows", tags=["workflows"])
+app.include_router(monitoring_router, prefix="/api/v1/monitoring", tags=["monitoring"])
 
 
 if __name__ == "__main__":
