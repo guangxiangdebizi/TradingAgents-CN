@@ -1,0 +1,92 @@
+# 模型到提示词模板的映射配置
+
+# DeepSeek 模型映射
+deepseek-chat:
+  financial_analysis: "deepseek_financial_analysis_zh"
+  fundamentals_analysis: "tradingagents_fundamentals_analyst_zh"
+  technical_analysis: "tradingagents_market_analyst_zh"
+  bull_analysis: "tradingagents_bull_researcher_zh"
+  bear_analysis: "tradingagents_bear_researcher_zh"
+  risk_management: "tradingagents_risk_manager_zh"
+  research_management: "tradingagents_research_manager_zh"
+  code_generation: "deepseek_code_generation_zh"
+  data_extraction: "deepseek_data_extraction_zh"
+  reasoning: "deepseek_reasoning_zh"
+  translation: "deepseek_translation_zh"
+  general: "general_assistant_zh"
+
+deepseek-coder:
+  code_generation: "deepseek_code_generation_zh"
+  financial_analysis: "deepseek_financial_analysis_zh"
+  data_extraction: "deepseek_data_extraction_zh"
+  general: "general_assistant_zh"
+
+# OpenAI 模型映射
+gpt-4:
+  financial_analysis: "openai_financial_analysis_zh"
+  fundamentals_analysis: "tradingagents_fundamentals_analyst_zh"
+  technical_analysis: "tradingagents_market_analyst_zh"
+  bull_analysis: "tradingagents_bull_researcher_zh"
+  bear_analysis: "tradingagents_bear_researcher_zh"
+  risk_management: "tradingagents_risk_manager_zh"
+  research_management: "tradingagents_research_manager_zh"
+  code_generation: "openai_code_generation_en"
+  data_extraction: "openai_data_extraction_zh"
+  reasoning: "openai_reasoning_zh"
+  translation: "openai_translation_zh"
+  general: "general_assistant_zh"
+
+gpt-3.5-turbo:
+  financial_analysis: "openai_financial_analysis_zh"
+  code_generation: "openai_code_generation_en"
+  data_extraction: "openai_data_extraction_zh"
+  general: "general_assistant_zh"
+
+# 阿里百炼 Qwen 模型映射
+qwen-plus:
+  financial_analysis: "qwen_financial_analysis_zh"
+  fundamentals_analysis: "tradingagents_fundamentals_analyst_zh"
+  technical_analysis: "tradingagents_market_analyst_zh"
+  bull_analysis: "tradingagents_bull_researcher_zh"
+  bear_analysis: "tradingagents_bear_researcher_zh"
+  risk_management: "tradingagents_risk_manager_zh"
+  research_management: "tradingagents_research_manager_zh"
+  code_generation: "qwen_code_generation_zh"
+  data_extraction: "qwen_data_extraction_zh"
+  reasoning: "qwen_reasoning_zh"
+  translation: "qwen_translation_zh"
+  general: "general_assistant_zh"
+
+qwen-turbo:
+  financial_analysis: "qwen_financial_analysis_zh"
+  data_extraction: "qwen_data_extraction_zh"
+  general: "general_assistant_zh"
+
+# Google Gemini 模型映射
+gemini-pro:
+  financial_analysis: "gemini_financial_analysis_zh"
+  code_generation: "gemini_code_generation_en"
+  data_extraction: "gemini_data_extraction_zh"
+  reasoning: "gemini_reasoning_zh"
+  general: "general_assistant_zh"
+
+# Claude 模型映射
+claude-3-opus:
+  financial_analysis: "claude_financial_analysis_zh"
+  code_generation: "claude_code_generation_en"
+  reasoning: "claude_reasoning_zh"
+  general: "general_assistant_zh"
+
+claude-3-sonnet:
+  financial_analysis: "claude_financial_analysis_zh"
+  data_extraction: "claude_data_extraction_zh"
+  general: "general_assistant_zh"
+
+# 默认映射（当找不到特定模型映射时使用）
+default:
+  financial_analysis: "general_assistant_zh"
+  code_generation: "general_assistant_zh"
+  data_extraction: "general_assistant_zh"
+  reasoning: "general_assistant_zh"
+  translation: "general_assistant_zh"
+  general: "general_assistant_zh"
