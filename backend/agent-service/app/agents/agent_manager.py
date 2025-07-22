@@ -8,9 +8,9 @@ from typing import Dict, List, Any, Optional, Type
 from datetime import datetime, timedelta
 from collections import defaultdict
 
-from backend.shared.logging_config import get_logger
-from backend.shared.database import DatabaseManager
-from backend.shared.redis_client import RedisClient
+from backend.shared.utils.logger import get_service_logger
+from backend.shared.database.mongodb import MongoDBManager
+import redis.asyncio as redis
 
 from .base_agent import BaseAgent, AgentType, AgentStatus, TaskType, TaskContext, TaskResult
 from .analysts.fundamentals_analyst import FundamentalsAnalyst
@@ -26,7 +26,7 @@ from .risk_assessors.risky_debator import RiskyDebator
 from .risk_assessors.safe_debator import SafeDebator
 from .risk_assessors.neutral_debator import NeutralDebator
 
-logger = get_logger("agent-service.agent_manager")
+logger = get_service_logger("agent-service.agent_manager")
 
 
 class AgentManager:
@@ -34,8 +34,8 @@ class AgentManager:
     
     def __init__(
         self,
-        db_manager: DatabaseManager,
-        redis_client: RedisClient,
+        db_manager: MongoDBManager,
+        redis_client: redis.Redis,
         state_manager: Any
     ):
         self.db_manager = db_manager

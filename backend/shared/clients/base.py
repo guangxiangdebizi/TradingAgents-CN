@@ -4,7 +4,7 @@
 import httpx
 from typing import Optional, Dict, Any
 from ..utils.logger import get_service_logger
-from ..utils.config import get_config
+from ..utils.config import get_config, get_service_config
 
 
 class BaseServiceClient:

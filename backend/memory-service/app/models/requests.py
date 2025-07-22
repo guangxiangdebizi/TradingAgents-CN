@@ -53,7 +53,7 @@ class DeleteMemoryRequest(BaseModel):
 class ExportMemoryRequest(BaseModel):
     """导出记忆请求"""
     collection_name: str = Field(..., description="集合名称")
-    format: str = Field("json", description="导出格式", regex="^(json|csv|xlsx)$")
+    format: str = Field("json", description="导出格式", pattern="^(json|csv|xlsx)$")
     include_embeddings: bool = Field(False, description="是否包含Embedding向量")
 
 class ImportMemoryRequest(BaseModel):
@@ -65,11 +65,11 @@ class ImportMemoryRequest(BaseModel):
 class AnalyzeMemoryRequest(BaseModel):
     """分析记忆请求"""
     collection_name: str = Field(..., description="集合名称")
-    analysis_type: str = Field("similarity", description="分析类型", regex="^(similarity|clustering|trends)$")
+    analysis_type: str = Field("similarity", description="分析类型", pattern="^(similarity|clustering|trends)$")
     parameters: Optional[Dict[str, Any]] = Field(None, description="分析参数")
 
 class OptimizeCollectionRequest(BaseModel):
     """优化集合请求"""
     collection_name: str = Field(..., description="集合名称")
-    operation: str = Field("compact", description="优化操作", regex="^(compact|reindex|cleanup)$")
+    operation: str = Field("compact", description="优化操作", pattern="^(compact|reindex|cleanup)$")
     parameters: Optional[Dict[str, Any]] = Field(None, description="优化参数")

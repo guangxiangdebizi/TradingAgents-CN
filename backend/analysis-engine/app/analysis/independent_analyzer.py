@@ -81,7 +81,7 @@ class IndependentAnalyzer:
                 params = {
                     "start_date": start_date,
                     "end_date": end_date,
-                    "force_refresh": True
+                    "force_refresh": "true"  # 转换为字符串
                 }
                 
                 async with session.get(url, params=params, timeout=60) as response:

@@ -16,36 +16,39 @@ from fastapi.responses import JSONResponse
 
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent.parent.parent.parent
+backend_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(backend_root))
 
-from backend.shared.logging_config import get_logger
-from backend.shared.config import get_settings
-from backend.shared.database import get_database_manager
-from backend.shared.redis_client import get_redis_client
+from backend.shared.utils.logger import get_service_logger
+from backend.shared.utils.config import get_service_config
+from backend.shared.database.mongodb import get_db_manager
+import redis.asyncio as redis
 
-from .agents.agent_manager import AgentManager
-from .orchestration.collaboration_engine import CollaborationEngine
-from .orchestration.debate_engine import DebateEngine
-from .orchestration.consensus_algorithm import ConsensusAlgorithm
-from .models.agent_models import AgentRequest, AgentResponse, DebateRequest, DebateResponse
-from .models.task_models import TaskRequest, TaskResponse, TaskStatus
-from .utils.state_manager import StateManager
-from .utils.message_router import MessageRouter
-from .utils.performance_monitor import PerformanceMonitor
-from .orchestration.workflow_manager import WorkflowManager
+# 暂时注释掉复杂的导入，先测试基本功能
+# from .agents.agent_manager import AgentManager
+# from .orchestration.collaboration_engine import CollaborationEngine
+# from .orchestration.debate_engine import DebateEngine
+# from .orchestration.consensus_algorithm import ConsensusAlgorithm
+# from .models.agent_models import AgentRequest, AgentResponse, DebateRequest, DebateResponse
+# from .models.task_models import TaskRequest, TaskResponse, TaskStatus
+# from .utils.state_manager import StateManager
+# from .utils.message_router import MessageRouter
+# from .utils.performance_monitor import PerformanceMonitor
+# from .orchestration.workflow_manager import WorkflowManager
 
-logger = get_logger("agent-service")
-settings = get_settings()
+logger = get_service_logger("agent-service")
+service_config = get_service_config("agent-service")
 
-# 全局组件
-agent_manager: Optional[AgentManager] = None
-collaboration_engine: Optional[CollaborationEngine] = None
-debate_engine: Optional[DebateEngine] = None
-consensus_algorithm: Optional[ConsensusAlgorithm] = None
-state_manager: Optional[StateManager] = None
-message_router: Optional[MessageRouter] = None
-workflow_manager: Optional[WorkflowManager] = None
-performance_monitor: Optional[PerformanceMonitor] = None
+# 全局组件 - 暂时使用Any类型
+agent_manager: Optional[Any] = None
+collaboration_engine: Optional[Any] = None
+debate_engine: Optional[Any] = None
+consensus_algorithm: Optional[Any] = None
+state_manager: Optional[Any] = None
+message_router: Optional[Any] = None
+workflow_manager: Optional[Any] = None
+performance_monitor: Optional[Any] = None
 
 
 @asynccontextmanager
@@ -58,48 +61,21 @@ async def lifespan(app: FastAPI):
     
     try:
         # 初始化数据库连接
-        db_manager = get_database_manager()
-        redis_client = get_redis_client()
-        
-        # 初始化状态管理器
-        state_manager = StateManager(db_manager, redis_client)
-        await state_manager.initialize()
-        
-        # 初始化消息路由器
-        message_router = MessageRouter(redis_client)
-        await message_router.initialize()
-        
-        # 初始化智能体管理器
-        agent_manager = AgentManager(db_manager, redis_client, state_manager)
-        await agent_manager.initialize()
-        
-        # 初始化协作引擎
-        collaboration_engine = CollaborationEngine(
-            agent_manager, state_manager, message_router
-        )
-        await collaboration_engine.initialize()
-        
-        # 初始化辩论引擎
-        debate_engine = DebateEngine(
-            agent_manager, state_manager, message_router
-        )
-        await debate_engine.initialize()
-        
-        # 初始化共识算法
-        consensus_algorithm = ConsensusAlgorithm(
-            agent_manager, state_manager
-        )
-        await consensus_algorithm.initialize()
+        db_manager = await get_db_manager()
 
-        # 初始化工作流管理器
-        workflow_manager = WorkflowManager(
-            agent_manager, state_manager, collaboration_engine
-        )
-        await workflow_manager.initialize()
-
-        # 初始化性能监控器
-        performance_monitor = PerformanceMonitor(state_manager)
-        await performance_monitor.initialize()
+        # 初始化Redis连接
+        redis_client = None
+        try:
+            redis_client = redis.from_url(service_config['redis_url'])
+            await redis_client.ping()
+            logger.info("✅ Redis 连接成功")
+        except Exception as e:
+            logger.warning(f"⚠️ Redis 连接失败: {e}")
+            redis_client = None
+        
+        # 暂时注释掉复杂的初始化逻辑，先测试基本功能
+        # TODO: 实现完整的组件初始化
+        logger.info("⚠️ 使用简化模式启动，部分功能暂不可用")
 
         logger.info("✅ Agent Service启动完成")
         
@@ -112,22 +88,10 @@ async def lifespan(app: FastAPI):
         logger.info("🔄 关闭Agent Service...")
         
         # 清理资源
-        if performance_monitor:
-            await performance_monitor.cleanup()
-        if workflow_manager:
-            await workflow_manager.cleanup()
-        if consensus_algorithm:
-            await consensus_algorithm.cleanup()
-        if debate_engine:
-            await debate_engine.cleanup()
-        if collaboration_engine:
-            await collaboration_engine.cleanup()
-        if agent_manager:
-            await agent_manager.cleanup()
-        if message_router:
-            await message_router.cleanup()
-        if state_manager:
-            await state_manager.cleanup()
+        if redis_client:
+            await redis_client.close()
+        if db_manager:
+            await db_manager.disconnect()
         
         logger.info("✅ Agent Service关闭完成")
 
@@ -150,38 +114,38 @@ app.add_middleware(
 )
 
 
-# 依赖注入
-def get_agent_manager() -> AgentManager:
+# 依赖注入 - 简化版本
+def get_agent_manager() -> Any:
     if agent_manager is None:
         raise HTTPException(status_code=503, detail="Agent Manager未初始化")
     return agent_manager
 
 
-def get_collaboration_engine() -> CollaborationEngine:
+def get_collaboration_engine() -> Any:
     if collaboration_engine is None:
         raise HTTPException(status_code=503, detail="Collaboration Engine未初始化")
     return collaboration_engine
 
 
-def get_debate_engine() -> DebateEngine:
+def get_debate_engine() -> Any:
     if debate_engine is None:
         raise HTTPException(status_code=503, detail="Debate Engine未初始化")
     return debate_engine
 
 
-def get_consensus_algorithm() -> ConsensusAlgorithm:
+def get_consensus_algorithm() -> Any:
     if consensus_algorithm is None:
         raise HTTPException(status_code=503, detail="Consensus Algorithm未初始化")
     return consensus_algorithm
 
 
-def get_workflow_manager() -> WorkflowManager:
+def get_workflow_manager() -> Any:
     if workflow_manager is None:
         raise HTTPException(status_code=503, detail="Workflow Manager未初始化")
     return workflow_manager
 
 
-def get_performance_monitor() -> PerformanceMonitor:
+def get_performance_monitor() -> Any:
     if performance_monitor is None:
         raise HTTPException(status_code=503, detail="Performance Monitor未初始化")
     return performance_monitor
@@ -251,7 +215,7 @@ app.include_router(monitoring_router, prefix="/api/v1/monitoring", tags=["monito
 
 if __name__ == "__main__":
     uvicorn.run(
-        "main:app",
+        "app.main:app",
         host="0.0.0.0",
         port=8008,
         reload=True,

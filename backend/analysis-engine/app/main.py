@@ -467,7 +467,7 @@ if __name__ == "__main__":
     
     config = get_service_config("analysis_engine")
     uvicorn.run(
-        "main:app",
+        "app.main:app",
         host="0.0.0.0",
         port=config['port'],
         reload=config['debug'],

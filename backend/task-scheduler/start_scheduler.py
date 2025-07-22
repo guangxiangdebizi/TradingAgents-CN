@@ -34,14 +34,22 @@ def main():
     
     # 启动 Celery Beat
     try:
-        celery_app.start([
-            'celery',
-            'beat',
+        import subprocess
+        import sys
+
+        # 使用当前Python环境的celery命令 (Celery 5.0+ 语法)
+        celery_cmd = [
+            sys.executable, '-m', 'celery',
             '--app=tasks.celery_app:celery_app',
+            'beat',
             '--loglevel=info',
-            '--schedule=/tmp/celerybeat-schedule',
-            '--pidfile=/tmp/celerybeat.pid'
-        ])
+            '--schedule=./celerybeat-schedule',
+            '--pidfile=./celerybeat.pid'
+        ]
+
+        logger.info(f"🚀 执行命令: {' '.join(celery_cmd)}")
+        subprocess.run(celery_cmd, check=True)
+
     except KeyboardInterrupt:
         logger.info("⏹️ 调度器已停止")
     except Exception as e:

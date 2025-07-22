@@ -167,7 +167,7 @@ async def start_analysis(request: AnalysisRequest, background_tasks: BackgroundT
         # 转发到分析引擎
         response = await analysis_engine_client.post(
             "/api/analysis/start",
-            data=request.model_dump()
+            data=request.model_dump(mode='json')  # 使用json模式确保datetime序列化
         )
         
         return APIResponse(**response)
@@ -247,15 +247,20 @@ async def cancel_analysis(analysis_id: str):
 # ==================== 数据相关接口 ====================
 
 @app.get("/api/stock/info/{symbol}", response_model=APIResponse)
-async def get_stock_info(symbol: str):
+async def get_stock_info(symbol: str, force_refresh: bool = False):
     """获取股票基本信息"""
     try:
         if not data_service_client:
             raise HTTPException(status_code=503, detail="数据服务不可用")
-        
+
+        # 构建查询参数
+        params = {}
+        if force_refresh:
+            params["force_refresh"] = force_refresh
+
         # 转发到数据服务
-        response = await data_service_client.get(f"/api/stock/info/{symbol}")
-        
+        response = await data_service_client.get(f"/api/stock/info/{symbol}", params=params)
+
         return APIResponse(**response)
         
     except httpx.HTTPError as e:
@@ -278,7 +283,7 @@ async def get_stock_data(request: StockDataRequest):
         # 转发到数据服务
         response = await data_service_client.post(
             "/api/stock/data",
-            data=request.model_dump()
+            data=request.model_dump(mode='json')  # 使用json模式确保兼容性
         )
         
         return APIResponse(**response)
@@ -298,21 +303,27 @@ async def get_stock_fundamentals(
     symbol: str,
     start_date: str,
     end_date: str,
-    curr_date: str
+    curr_date: str,
+    force_refresh: bool = False
 ):
     """获取股票基本面数据"""
     try:
         if not data_service_client:
             raise HTTPException(status_code=503, detail="数据服务不可用")
-        
+
+        # 构建查询参数
+        params = {
+            "start_date": start_date,
+            "end_date": end_date,
+            "curr_date": curr_date
+        }
+        if force_refresh:
+            params["force_refresh"] = force_refresh
+
         # 转发到数据服务
         response = await data_service_client.get(
             f"/api/stock/fundamentals/{symbol}",
-            params={
-                "start_date": start_date,
-                "end_date": end_date,
-                "curr_date": curr_date
-            }
+            params=params
         )
         
         return APIResponse(**response)
@@ -328,15 +339,28 @@ async def get_stock_fundamentals(
 
 
 @app.get("/api/stock/news/{symbol}", response_model=APIResponse)
-async def get_stock_news(symbol: str):
+async def get_stock_news(
+    symbol: str,
+    limit: int = 10,
+    days: int = 7,
+    force_refresh: bool = False
+):
     """获取股票新闻"""
     try:
         if not data_service_client:
             raise HTTPException(status_code=503, detail="数据服务不可用")
-        
+
+        # 构建查询参数
+        params = {
+            "limit": limit,
+            "days": days
+        }
+        if force_refresh:
+            params["force_refresh"] = force_refresh
+
         # 转发到数据服务
-        response = await data_service_client.get(f"/api/stock/news/{symbol}")
-        
+        response = await data_service_client.get(f"/api/stock/news/{symbol}", params=params)
+
         return APIResponse(**response)
         
     except httpx.HTTPError as e:
@@ -420,7 +444,7 @@ if __name__ == "__main__":
 
     config = get_service_config("api_gateway")
     uvicorn.run(
-        "main:app",
+        "app.main:app",
         host="0.0.0.0",
         port=config['port'],
         reload=config['debug'],

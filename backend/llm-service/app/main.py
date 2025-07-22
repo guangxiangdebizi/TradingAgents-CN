@@ -19,8 +19,8 @@ import redis.asyncio as redis
 from .adapters.factory import get_adapter_factory
 from .routing.model_router import ModelRouter
 from .tracking.usage_tracker import UsageTracker
-from .prompts.prompt_manager import get_prompt_manager
-from .models.requests import ChatCompletionRequest, ModelListRequest
+from .prompts.prompt_manager import get_prompt_manager as create_prompt_manager
+from .models.requests import ChatCompletionRequest, ModelListRequest, ChatMessage
 from .models.responses import ChatCompletionResponse, ModelListResponse, UsageStatsResponse
 from .config.settings import LLM_SERVICE_CONFIG
 
@@ -72,7 +72,8 @@ async def startup_event():
         redis_client = None
 
     # 初始化提示词管理器
-    prompt_manager = await get_prompt_manager()
+    global prompt_manager
+    prompt_manager = await create_prompt_manager()
     logger.info("✅ 提示词管理器初始化完成")
 
     # 初始化适配器工厂
@@ -191,13 +192,13 @@ async def chat_completions(
 
         # 如果消息只有一条用户消息，尝试使用提示词模板
         if (len(request.messages) == 1 and
-            request.messages[0].get("role") == "user" and
+            request.messages[0].role == "user" and
             hasattr(request, 'use_prompt_template') and
             getattr(request, 'use_prompt_template', True)):
 
             try:
                 # 提取用户输入
-                user_input = request.messages[0].get("content", "")
+                user_input = request.messages[0].content
 
                 # 使用提示词管理器格式化消息
                 formatted_messages = prompt_mgr.format_messages(
@@ -214,9 +215,20 @@ async def chat_completions(
             except Exception as e:
                 logger.warning(f"⚠️ 提示词处理失败，使用原始消息: {e}")
 
-        # 4. 调用模型
+        # 4. 转换消息格式（如果需要）
+        if isinstance(messages_to_send[0], ChatMessage):
+            # 转换ChatMessage对象为字典
+            messages_dict = [
+                {"role": msg.role, "content": msg.content}
+                for msg in messages_to_send
+            ]
+        else:
+            # 已经是字典格式
+            messages_dict = messages_to_send
+
+        # 5. 调用模型
         result = await adapter.chat_completion(
-            messages=messages_to_send,
+            messages=messages_dict,
             max_tokens=request.max_tokens,
             temperature=request.temperature,
             stream=request.stream
@@ -252,7 +264,11 @@ async def chat_completions(
             user_id=request.user_id or "anonymous",
             model=selected_model,
             task_type=request.task_type,
-            usage=response.usage,
+            usage={
+                "prompt_tokens": response.usage.prompt_tokens,
+                "completion_tokens": response.usage.completion_tokens,
+                "total_tokens": response.usage.total_tokens
+            },
             duration=(datetime.now() - start_time).total_seconds()
         )
         

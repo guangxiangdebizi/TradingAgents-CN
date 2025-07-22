@@ -1,0 +1,133 @@
+version: '3.8'
+
+services:
+  # Redis服务
+  redis:
+    image: redis:7-alpine
+    container_name: tradingagents-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - tradingagents-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MongoDB服务 (与主项目保持一致 - MongoDB 4.4)
+  mongodb:
+    image: mongo:4.4
+    container_name: tradingagents-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: tradingagents123
+      MONGO_INITDB_DATABASE: tradingagents
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - tradingagents-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongo localhost:27017/test --quiet
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Agent Service
+  agent-service:
+    build:
+      context: .
+      dockerfile: ./agent-service/Dockerfile
+    container_name: tradingagents-agent-service
+    ports:
+      - "8002:8002"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MONGODB_HOST=mongodb
+      - MONGODB_PORT=27017
+      - MONGODB_USERNAME=admin
+      - MONGODB_PASSWORD=tradingagents123
+      - MONGODB_DATABASE=tradingagents
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./shared:/app/backend/shared:ro
+    networks:
+      - tradingagents-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Analysis Engine (集成版)
+  analysis-engine:
+    build:
+      context: .
+      dockerfile: ./analysis-engine/Dockerfile
+    container_name: tradingagents-analysis-engine
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - AGENT_SERVICE_URL=http://agent-service:8002
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./shared:/app/backend/shared:ro
+    networks:
+      - tradingagents-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      agent-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    command: ["python", "-m", "app.integrated_main"]
+
+  # 集成测试服务
+  integration-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: tradingagents-integration-test
+    environment:
+      - ANALYSIS_ENGINE_URL=http://analysis-engine:8000
+      - AGENT_SERVICE_URL=http://agent-service:8002
+    volumes:
+      - ./test_integration.py:/app/test_integration.py:ro
+    networks:
+      - tradingagents-network
+    depends_on:
+      analysis-engine:
+        condition: service_healthy
+      agent-service:
+        condition: service_healthy
+    profiles:
+      - test
+    command: ["python", "test_integration.py"]
+
+networks:
+  tradingagents-network:
+    driver: bridge
+
+volumes:
+  redis_data:
+  mongodb_data:

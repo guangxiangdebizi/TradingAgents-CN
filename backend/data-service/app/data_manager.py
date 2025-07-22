@@ -22,25 +22,7 @@ from backend.shared.i18n.config import SupportedLanguage
 # 初始化国际化日志
 i18n_logger = get_i18n_logger("data-manager")
 logger = get_compatible_logger("data-manager")  # 兼容现有代码
-# 导入统一工具函数
-try:
-    from tradingagents.dataflows.stock_api import get_stock_info, get_stock_data
-    from tradingagents.dataflows.interface import get_stock_fundamentals_unified as get_stock_fundamentals
-    from tradingagents.dataflows.interface import get_stock_news_unified as get_stock_news
-except ImportError as e:
-    logger.warning(f"⚠️ 导入统一工具失败: {e}")
-    # 提供降级函数
-    def get_stock_info(symbol):
-        return {"symbol": symbol, "name": f"股票{symbol}", "error": "数据源不可用"}
-
-    def get_stock_data(symbol, start_date, end_date):
-        return f"股票{symbol}数据不可用"
-
-    def get_stock_fundamentals(symbol, start_date, end_date, curr_date):
-        return f"股票{symbol}基本面数据不可用"
-
-    def get_stock_news(symbol, curr_date, hours_back):
-        return f"股票{symbol}新闻数据不可用"
+# 注意：我们现在使用新的数据源工厂，不再依赖原项目的统一工具
 from .datasources.factory import get_data_source_factory, DataSourceFactory
 from .datasources.base import MarketType, DataCategory
 
@@ -105,11 +87,6 @@ class DataManager:
         # 初始化数据源工厂
         self.data_source_factory = get_data_source_factory()
 
-    def set_log_language(self, language: SupportedLanguage):
-        """设置日志语言"""
-        i18n_logger.set_language(language)
-        i18n_logger.info("log.data_manager.language_set", language=language.value)
-
         # 数据配置
         self.data_configs = {
             DataType.STOCK_INFO: DataConfig(
@@ -144,7 +121,12 @@ class DataManager:
         
         # 初始化集合索引
         self._init_indexes()
-    
+
+    def set_log_language(self, language: SupportedLanguage):
+        """设置日志语言"""
+        i18n_logger.set_language(language)
+        i18n_logger.info("log.data_manager.language_set", language=language.value)
+
     def _init_indexes(self):
         """初始化数据库索引"""
         try:
@@ -247,15 +229,22 @@ class DataManager:
         try:
             # 先检查 Redis
             redis_key = f"data:{symbol}:{data_type.value}"
-            i18n_logger.debug("log.debug.data.redis_check", key=redis_key)
+            i18n_logger.debug("log.debug.data.redis_check", cache_key=redis_key)
 
             redis_data = self.redis.get(redis_key)
             if redis_data:
-                i18n_logger.debug("log.debug.data.redis_hit", key=redis_key)
+                i18n_logger.debug("log.debug.data.redis_hit", cache_key=redis_key)
                 data_dict = json.loads(redis_data)
+
+                # 确保datetime字段正确解析
+                if 'timestamp' in data_dict and isinstance(data_dict['timestamp'], str):
+                    data_dict['timestamp'] = datetime.fromisoformat(data_dict['timestamp'].replace('Z', '+00:00'))
+                if 'expires_at' in data_dict and isinstance(data_dict['expires_at'], str):
+                    data_dict['expires_at'] = datetime.fromisoformat(data_dict['expires_at'].replace('Z', '+00:00'))
+
                 return CachedData(**data_dict)
 
-            i18n_logger.debug("log.debug.data.redis_miss", key=redis_key)
+            i18n_logger.debug("log.debug.data.redis_miss", cache_key=redis_key)
 
             # 再检查 MongoDB
             i18n_logger.debug("log.debug.data.mongo_check", symbol=symbol, data_type=data_type.value)

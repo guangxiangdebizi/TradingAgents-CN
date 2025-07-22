@@ -345,6 +345,7 @@ async def set_log_language(request: dict):
 @app.get("/api/stock/info/{symbol}", response_model=APIResponse)
 async def get_stock_info(
     symbol: str,
+    force_refresh: bool = False,  # 添加强制刷新参数
     redis_client: Optional[redis.Redis] = Depends(get_redis)
 ):
     """获取股票基本信息"""
@@ -364,7 +365,8 @@ async def get_stock_info(
         cache_key = f"stock_info:{symbol}"
         debug_logger.debug_cache_check_start(symbol, "stock_info")
 
-        if redis_client:
+        # 检查缓存（除非强制刷新）
+        if redis_client and not force_refresh:
             cached_data = await redis_client.get(cache_key)
             if cached_data:
                 debug_logger.debug_cache_check_result("hit", symbol)
@@ -377,6 +379,9 @@ async def get_stock_info(
                     message="获取股票信息成功（缓存）",
                     data=json.loads(cached_data)
                 )
+
+        if force_refresh:
+            logger.info(f"🔄 强制刷新股票信息: {symbol}")
 
         debug_logger.debug_cache_check_result("miss", symbol)
         
@@ -392,18 +397,68 @@ async def get_stock_info(
 
         debug_logger.debug_data_source_response("china_stock_unified", "success", len(str(info_data)))
 
-        # 解析数据（这里需要根据实际返回格式调整）
+        # 解析数据（从Tushare返回的数据中提取）
         debug_logger.debug_data_transform_start("raw_response", "stock_info")
-        stock_info = {
-            "symbol": symbol,
-            "name": "股票名称",  # 需要从info_data中解析
-            "market": "A股",
-            "industry": None,
-            "sector": None,
-            "market_cap": None,
-            "currency": "CNY"
-        }
+
+        # 调试：打印info_data的类型和内容
+        logger.info(f"🔍 [调试] info_data类型: {type(info_data)}")
+        logger.info(f"🔍 [调试] info_data内容: {info_data}")
+
+        # 从info_data中提取实际数据
+        if isinstance(info_data, str) and "股票名称:" in info_data:
+            # 解析字符串格式的数据
+            lines = info_data.split('\n')
+            name = "未知股票"
+            area = None
+            industry = None
+            market = "A股"
+
+            for line in lines:
+                if "股票名称:" in line:
+                    name = line.split(':')[1].strip()
+                elif "所属地区:" in line:
+                    area = line.split(':')[1].strip()
+                elif "所属行业:" in line:
+                    industry = line.split(':')[1].strip()
+                elif "上市市场:" in line:
+                    market = line.split(':')[1].strip()
+
+            stock_info = {
+                "symbol": symbol,
+                "name": name,
+                "market": market,
+                "industry": industry,
+                "sector": area,
+                "market_cap": None,
+                "currency": "CNY"
+            }
+        elif isinstance(info_data, list) and len(info_data) > 0:
+            # 处理列表格式的数据
+            data = info_data[0]  # 取第一条记录
+            stock_info = {
+                "symbol": symbol,
+                "name": data.get("name", "未知股票"),
+                "market": data.get("market", "A股"),
+                "industry": data.get("industry"),
+                "sector": data.get("area"),  # 使用area作为sector
+                "market_cap": None,  # Tushare基础信息中没有市值
+                "currency": "CNY"
+            }
+        else:
+            # 如果数据格式不对，使用默认值
+            stock_info = {
+                "symbol": symbol,
+                "name": "未知股票",
+                "market": "A股",
+                "industry": None,
+                "sector": None,
+                "market_cap": None,
+                "currency": "CNY"
+            }
         debug_logger.debug_data_transform_end(1)
+
+        # 详细调试：打印最终的stock_info内容
+        logger.info(f"🔍 [最终结果] stock_info内容: {stock_info}")
 
         # 缓存数据
         if redis_client:
@@ -1321,9 +1376,17 @@ if __name__ == "__main__":
 
     config = get_service_config("data_service")
     uvicorn.run(
-        "main:app",
+        "app.main:app",
         host="0.0.0.0",
         port=config['port'],
-        reload=config['debug'],
-        log_level=config['log_level'].lower()
+        reload=False,  # 暂时关闭reload避免频繁监控日志
+        log_level=config['log_level'].lower(),
+        reload_excludes=[
+            "logs/*",
+            "results/*",
+            "data/*",
+            "*/__pycache__/*",
+            "*.log",
+            "*.pyc"
+        ]
     )
