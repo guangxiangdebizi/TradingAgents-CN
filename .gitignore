@@ -154,3 +154,8 @@ COMMIT_SUMMARY.md
 *.temp
 *.pyc.*
 *.pyo.*
+
+# Celery临时文件
+celerybeat-schedule*
+celerybeat.pid
+celery.pid
