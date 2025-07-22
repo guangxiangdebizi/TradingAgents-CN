@@ -1,0 +1,47 @@
+# Agent Service Dependencies
+
+# Web框架
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# 异步支持
+asyncio-mqtt==0.16.1
+aioredis==2.0.1
+motor==3.3.2
+
+# 数据验证
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# HTTP客户端
+httpx==0.25.2
+aiohttp==3.9.1
+
+# 数据库
+pymongo==4.6.0
+redis==5.0.1
+
+# 日志
+loguru==0.7.2
+
+# 工具库
+python-multipart==0.0.6
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# 时间处理
+python-dateutil==2.8.2
+
+# JSON处理
+orjson==3.9.10
+
+# 配置管理
+python-dotenv==1.0.0
+
+# 监控
+prometheus-client==0.19.0
+
+# 测试
+pytest==7.4.3
+pytest-asyncio==0.21.1
+httpx==0.25.2
