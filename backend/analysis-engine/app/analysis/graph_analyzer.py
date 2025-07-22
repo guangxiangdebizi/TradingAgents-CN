@@ -11,16 +11,19 @@ from datetime import datetime
 from ..tools.toolkit_manager import ToolkitManager
 from ..graphs.analysis_graph import AnalysisGraph
 from ..agents.agent_factory import AgentFactory
+from ..memory.memory_client import get_memory_client, MemoryClient
 
 logger = logging.getLogger(__name__)
 
 class GraphAnalyzer:
     """基于图的分析器"""
     
-    def __init__(self):
+    def __init__(self, memory_service_url: str = "http://localhost:8006"):
         self.toolkit_manager: Optional[ToolkitManager] = None
         self.analysis_graph: Optional[AnalysisGraph] = None
         self.agent_factory: Optional[AgentFactory] = None
+        self.memory_client: Optional[MemoryClient] = None
+        self.memory_service_url = memory_service_url
         self.initialized = False
     
     async def initialize(self):
@@ -36,13 +39,18 @@ class GraphAnalyzer:
             self.agent_factory = AgentFactory()
             await self.agent_factory.initialize()
             
+            # 初始化Memory客户端
+            self.memory_client = await get_memory_client(self.memory_service_url)
+            logger.info("✅ Memory客户端初始化完成")
+
             # 初始化分析图
             self.analysis_graph = AnalysisGraph(
                 toolkit_manager=self.toolkit_manager,
-                agent_factory=self.agent_factory
+                agent_factory=self.agent_factory,
+                memory_client=self.memory_client
             )
             await self.analysis_graph.initialize()
-            
+
             self.initialized = True
             logger.info("✅ 基于图的分析器初始化完成")
             

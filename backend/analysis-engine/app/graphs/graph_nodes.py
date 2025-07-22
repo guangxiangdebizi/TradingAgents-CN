@@ -11,15 +11,18 @@ from datetime import datetime
 from .graph_state import GraphState
 from ..tools.toolkit_manager import ToolkitManager
 from ..agents.agent_factory import AgentFactory
+from ..memory.memory_client import MemoryClient
 
 logger = logging.getLogger(__name__)
 
 class GraphNodes:
     """图节点类"""
     
-    def __init__(self, toolkit_manager: ToolkitManager, agent_factory: AgentFactory):
+    def __init__(self, toolkit_manager: ToolkitManager, agent_factory: AgentFactory,
+                 memory_client: Optional[MemoryClient] = None):
         self.toolkit_manager = toolkit_manager
         self.agent_factory = agent_factory
+        self.memory_client = memory_client
         self.initialized = False
     
     async def initialize(self):

@@ -12,15 +12,18 @@ from .graph_state import GraphState, AnalysisParameters
 from .graph_nodes import GraphNodes
 from ..tools.toolkit_manager import ToolkitManager
 from ..agents.agent_factory import AgentFactory
+from ..memory.memory_client import MemoryClient
 
 logger = logging.getLogger(__name__)
 
 class AnalysisGraph:
     """分析图类"""
     
-    def __init__(self, toolkit_manager: ToolkitManager, agent_factory: AgentFactory):
+    def __init__(self, toolkit_manager: ToolkitManager, agent_factory: AgentFactory,
+                 memory_client: Optional[MemoryClient] = None):
         self.toolkit_manager = toolkit_manager
         self.agent_factory = agent_factory
+        self.memory_client = memory_client
         self.graph_nodes: Optional[GraphNodes] = None
         self.initialized = False
     
@@ -32,7 +35,8 @@ class AnalysisGraph:
             # 初始化图节点
             self.graph_nodes = GraphNodes(
                 toolkit_manager=self.toolkit_manager,
-                agent_factory=self.agent_factory
+                agent_factory=self.agent_factory,
+                memory_client=self.memory_client
             )
             await self.graph_nodes.initialize()
             
