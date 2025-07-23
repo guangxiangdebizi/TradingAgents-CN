@@ -79,7 +79,9 @@ class BaseServiceClient:
         """健康检查"""
         try:
             response = await self.get("/health")
-            return response.get("status") == "healthy"
+            status = response.get("status")
+            # 接受 "healthy" 和 "degraded" 状态作为可用状态
+            return status in ["healthy", "degraded"]
         except Exception as e:
             self.logger.warning(f"Health check failed for {self.service_name}: {e}")
             return False

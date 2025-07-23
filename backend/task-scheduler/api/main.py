@@ -426,4 +426,20 @@ async def trigger_custom_update(request: Dict[str, Any]):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8003)
+    import sys
+    from pathlib import Path
+
+    # 添加shared路径
+    shared_path = Path(__file__).parent.parent.parent / "shared"
+    sys.path.insert(0, str(shared_path))
+
+    from utils.config import get_config
+
+    config = get_config()
+    uvicorn.run(
+        "api.main:app",
+        host="0.0.0.0",
+        port=config.get('TASK_SCHEDULER_PORT', 8003),
+        reload=config.get('DEBUG', False),
+        log_level=config.get('LOG_LEVEL', 'INFO').lower()
+    )

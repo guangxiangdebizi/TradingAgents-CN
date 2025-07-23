@@ -203,6 +203,177 @@ class DataClient(BaseServiceClient):
             self.logger.error(f"Stock search failed: {e}")
             raise
 
+    async def get_company_info(
+        self,
+        symbol: str,
+        market: str = "US",
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        获取公司基本信息
+
+        Args:
+            symbol: 股票代码
+            **kwargs: 其他参数
+
+        Returns:
+            公司信息数据
+        """
+        try:
+            params = {"symbol": symbol, "market": market, **kwargs}
+            response = await self.get("/api/v1/company/info", params=params)
+
+            if response.get("success"):
+                self.logger.info(f"✅ 获取公司信息成功: {symbol}")
+                return response.get("data", {})
+            else:
+                error_msg = response.get("message", "未知错误")
+                self.logger.error(f"❌ 获取公司信息失败: {symbol} - {error_msg}")
+                return {}
+
+        except Exception as e:
+            self.logger.error(f"❌ 获取公司信息失败: {e}")
+            raise
+
+    async def get_income_statement(
+        self,
+        symbol: str,
+        market: str = "US",
+        period: str = "annual",
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        获取损益表数据
+
+        Args:
+            symbol: 股票代码
+            period: 报告期间 (annual/quarterly)
+            **kwargs: 其他参数
+
+        Returns:
+            损益表数据
+        """
+        try:
+            params = {"symbol": symbol, "market": market, "period": period, **kwargs}
+            response = await self.get("/api/v1/financial/income", params=params)
+
+            if response.get("success"):
+                self.logger.info(f"✅ 获取损益表成功: {symbol}")
+                return response.get("data", {})
+            else:
+                error_msg = response.get("message", "未知错误")
+                self.logger.error(f"❌ 获取损益表失败: {symbol} - {error_msg}")
+                return {}
+
+        except Exception as e:
+            self.logger.error(f"❌ 获取损益表失败: {e}")
+            raise
+
+    async def get_balance_sheet(
+        self,
+        symbol: str,
+        market: str = "US",
+        period: str = "annual",
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        获取资产负债表数据
+
+        Args:
+            symbol: 股票代码
+            market: 市场类型
+            period: 报告期间 (annual/quarterly)
+            **kwargs: 其他参数
+
+        Returns:
+            资产负债表数据
+        """
+        try:
+            params = {"symbol": symbol, "market": market, "period": period, **kwargs}
+            response = await self.get("/api/v1/financial/balance", params=params)
+
+            if response.get("success"):
+                self.logger.info(f"✅ 获取资产负债表成功: {symbol}")
+                return response.get("data", {})
+            else:
+                error_msg = response.get("message", "未知错误")
+                self.logger.error(f"❌ 获取资产负债表失败: {symbol} - {error_msg}")
+                return {}
+
+        except Exception as e:
+            self.logger.error(f"❌ 获取资产负债表失败: {e}")
+            raise
+
+    async def get_cash_flow(
+        self,
+        symbol: str,
+        market: str = "US",
+        period: str = "annual",
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        获取现金流量表数据
+
+        Args:
+            symbol: 股票代码
+            market: 市场类型
+            period: 报告期间 (annual/quarterly)
+            **kwargs: 其他参数
+
+        Returns:
+            现金流量表数据
+        """
+        try:
+            params = {"symbol": symbol, "market": market, "period": period, **kwargs}
+            response = await self.get("/api/v1/financial/cashflow", params=params)
+
+            if response.get("success"):
+                self.logger.info(f"✅ 获取现金流量表成功: {symbol}")
+                return response.get("data", {})
+            else:
+                error_msg = response.get("message", "未知错误")
+                self.logger.error(f"❌ 获取现金流量表失败: {symbol} - {error_msg}")
+                return {}
+
+        except Exception as e:
+            self.logger.error(f"❌ 获取现金流量表失败: {e}")
+            raise
+
+    async def get_price_history(
+        self,
+        symbol: str,
+        period: str = "1y",
+        interval: str = "1d",
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        获取价格历史数据
+
+        Args:
+            symbol: 股票代码
+            period: 时间周期 (1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max)
+            interval: 数据间隔 (1m, 2m, 5m, 15m, 30m, 60m, 90m, 1h, 1d, 5d, 1wk, 1mo, 3mo)
+            **kwargs: 其他参数
+
+        Returns:
+            价格历史数据
+        """
+        try:
+            params = {"symbol": symbol, "period": period, "interval": interval, **kwargs}
+            response = await self.get("/api/v1/market/history", params=params)
+
+            if response.get("success"):
+                self.logger.info(f"✅ 获取价格历史成功: {symbol}")
+                return response.get("data", {})
+            else:
+                error_msg = response.get("message", "未知错误")
+                self.logger.error(f"❌ 获取价格历史失败: {symbol} - {error_msg}")
+                return {}
+
+        except Exception as e:
+            self.logger.error(f"❌ 获取价格历史失败: {e}")
+            raise
+
 
 # 全局数据客户端实例
 _data_client: Optional[DataClient] = None

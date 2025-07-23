@@ -49,6 +49,7 @@ frontend/components.d.ts
 .env.*.local
 .env.db
 .env.mongodb*
+backend/.backend_env
 
 # 系统文件
 .DS_Store

@@ -1,0 +1,89 @@
+# ==========================================
+# Backend微服务环境配置文件示例
+# 复制此文件为 .backend_env 并填入真实的API密钥
+# ==========================================
+
+# 🌐 微服务端口配置 (用于服务间通信)
+# API网关
+API_GATEWAY_HOST=localhost
+API_GATEWAY_PORT=8000
+
+# 数据服务
+DATA_SERVICE_HOST=localhost
+DATA_SERVICE_PORT=8002
+
+# 分析引擎
+ANALYSIS_ENGINE_HOST=localhost
+ANALYSIS_ENGINE_PORT=8001
+
+# 任务调度器
+TASK_SCHEDULER_HOST=localhost
+TASK_SCHEDULER_PORT=8003
+
+# LLM服务
+LLM_SERVICE_HOST=localhost
+LLM_SERVICE_PORT=8004
+
+# 内存服务
+MEMORY_SERVICE_HOST=localhost
+MEMORY_SERVICE_PORT=8006
+
+# Agent服务
+AGENT_SERVICE_HOST=localhost
+AGENT_SERVICE_PORT=8008
+
+# 🗄️ 数据库配置
+# MongoDB配置
+MONGODB_HOST=localhost
+MONGODB_PORT=27017
+MONGODB_USERNAME=admin
+MONGODB_PASSWORD=tradingagents123
+MONGODB_DATABASE=tradingagents
+MONGODB_AUTH_SOURCE=admin
+MONGODB_URL=mongodb://admin:tradingagents123@localhost:27017/tradingagents?authSource=admin
+
+# Redis配置
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_DB=0
+REDIS_URL=redis://localhost:6379/0
+
+# 🔑 API密钥配置
+# LLM服务密钥 (请填入您的真实API密钥)
+DEEPSEEK_API_KEY=your_deepseek_api_key_here
+GOOGLE_API_KEY=your_google_api_key_here
+DASHSCOPE_API_KEY=your_dashscope_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
+
+# 数据源API密钥 (请填入您的真实API密钥)
+TUSHARE_TOKEN=your_tushare_token_here
+FINNHUB_API_KEY=your_finnhub_api_key_here
+
+# Alpha Vantage 数据源 (可选)
+ALPHA_VANTAGE_API_KEY=your_alpha_vantage_api_key_here
+
+# Twelve Data 数据源 (可选)
+TWELVE_DATA_API_KEY=your_twelve_data_api_key_here
+
+# 🛠️ 系统配置
+# 环境设置
+ENVIRONMENT=development
+DEBUG=true
+LOG_LEVEL=INFO
+
+# 服务超时配置
+SERVICE_TIMEOUT=60
+HEALTH_CHECK_TIMEOUT=10
+
+# 🔒 安全配置
+# JWT配置
+JWT_SECRET_KEY=your_jwt_secret_key_here
+JWT_ALGORITHM=HS256
+JWT_EXPIRE_MINUTES=1440
+
+# CORS配置
+CORS_ORIGINS=["http://localhost:3000", "http://localhost:8000"]
+CORS_ALLOW_CREDENTIALS=true
+CORS_ALLOW_METHODS=["*"]
+CORS_ALLOW_HEADERS=["*"]

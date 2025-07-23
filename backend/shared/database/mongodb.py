@@ -30,6 +30,7 @@ class MongoDBManager:
         try:
             # 优先使用完整的 MONGODB_URL
             mongodb_url = self.config.get('MONGODB_URL')
+            password = None  # 初始化password变量
 
             # 如果没有完整URL，从分开的配置项构建
             if not mongodb_url:
@@ -50,7 +51,7 @@ class MongoDBManager:
                 return False
 
             # 调试：打印连接字符串（隐藏密码）
-            safe_url = mongodb_url.replace(password or '', '***') if password else mongodb_url
+            safe_url = mongodb_url.replace(password, '***') if password else mongodb_url
             logger.info(f"🔗 尝试连接MongoDB: {safe_url}")
             
             # 创建客户端

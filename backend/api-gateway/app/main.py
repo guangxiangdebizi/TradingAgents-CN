@@ -30,12 +30,14 @@ from backend.shared.clients.base import BaseServiceClient
 logger = get_service_logger("api-gateway")
 analysis_engine_client: Optional[BaseServiceClient] = None
 data_service_client: Optional[BaseServiceClient] = None
+llm_service_client: Optional[BaseServiceClient] = None
+agent_service_client: Optional[BaseServiceClient] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
-    global analysis_engine_client, data_service_client
+    global analysis_engine_client, data_service_client, llm_service_client, agent_service_client
     
     # 启动时初始化
     logger.info("🚀 API Gateway 启动中...")
@@ -44,17 +46,29 @@ async def lifespan(app: FastAPI):
     try:
         analysis_engine_client = BaseServiceClient("analysis_engine")
         data_service_client = BaseServiceClient("data_service")
-        
+        llm_service_client = BaseServiceClient("llm_service")
+        agent_service_client = BaseServiceClient("agent_service")
+
         # 检查服务健康状态
         if await analysis_engine_client.health_check():
             logger.info("✅ Analysis Engine 连接成功")
         else:
             logger.warning("⚠️ Analysis Engine 连接失败")
-            
+
         if await data_service_client.health_check():
             logger.info("✅ Data Service 连接成功")
         else:
             logger.warning("⚠️ Data Service 连接失败")
+
+        if await llm_service_client.health_check():
+            logger.info("✅ LLM Service 连接成功")
+        else:
+            logger.warning("⚠️ LLM Service 连接失败")
+
+        if await agent_service_client.health_check():
+            logger.info("✅ Agent Service 连接成功")
+        else:
+            logger.warning("⚠️ Agent Service 连接失败")
             
     except Exception as e:
         logger.warning(f"⚠️ 服务客户端初始化失败: {e}")
@@ -144,7 +158,23 @@ async def health_check():
             dependencies["data_service"] = "unhealthy"
     else:
         dependencies["data_service"] = "not_configured"
-    
+
+    if llm_service_client:
+        if await llm_service_client.health_check():
+            dependencies["llm_service"] = "healthy"
+        else:
+            dependencies["llm_service"] = "unhealthy"
+    else:
+        dependencies["llm_service"] = "not_configured"
+
+    if agent_service_client:
+        if await agent_service_client.health_check():
+            dependencies["agent_service"] = "healthy"
+        else:
+            dependencies["agent_service"] = "unhealthy"
+    else:
+        dependencies["agent_service"] = "not_configured"
+
     return HealthCheck(
         service_name="api-gateway",
         status="healthy",
@@ -439,14 +469,138 @@ async def get_system_status():
         raise HTTPException(status_code=500, detail=f"获取系统状态失败: {str(e)}")
 
 
+# ==================== LLM服务路由 ====================
+
+@app.post("/api/v1/chat/completions")
+async def llm_chat_completions(request: Request):
+    """LLM聊天完成接口"""
+    try:
+        if not llm_service_client:
+            raise HTTPException(status_code=503, detail="LLM服务不可用")
+
+        # 获取请求体并解析为JSON
+        body = await request.body()
+
+        # 转发请求到LLM服务
+        response = await llm_service_client.post("/api/v1/chat/completions", data=body, headers={"Content-Type": "application/json"})
+        return response
+
+    except Exception as e:
+        logger.error(f"❌ LLM服务请求失败: {e}")
+        raise HTTPException(status_code=500, detail=f"LLM服务请求失败: {str(e)}")
+
+
+# ==================== 市场数据路由 ====================
+
+@app.get("/api/v1/market/data")
+async def market_data(market: str, data_type: str = "US"):
+    """获取市场数据"""
+    try:
+        if not data_service_client:
+            raise HTTPException(status_code=503, detail="数据服务不可用")
+
+        # 转发请求到数据服务，增加超时时间
+        response = await data_service_client.get(f"/api/v1/market/data?market={market}&data_type={data_type}", timeout=60)
+        return response
+
+    except Exception as e:
+        logger.error(f"❌ 市场数据请求失败: {e}")
+        raise HTTPException(status_code=500, detail=f"市场数据请求失败: {str(e)}")
+
+
+@app.get("/api/v1/company/info")
+async def company_info(symbol: str, market: str = "US"):
+    """获取公司信息"""
+    try:
+        if not data_service_client:
+            raise HTTPException(status_code=503, detail="数据服务不可用")
+
+        response = await data_service_client.get(f"/api/v1/company/info?symbol={symbol}&market={market}", timeout=60)
+        return response
+
+    except Exception as e:
+        logger.error(f"❌ 公司信息请求失败: {e}")
+        raise HTTPException(status_code=500, detail=f"公司信息请求失败: {str(e)}")
+
+
+@app.get("/api/v1/financial/income")
+async def financial_income(symbol: str, market: str = "US", period: str = "annual"):
+    """获取损益表数据"""
+    try:
+        if not data_service_client:
+            raise HTTPException(status_code=503, detail="数据服务不可用")
+
+        response = await data_service_client.get(f"/api/v1/financial/income?symbol={symbol}&market={market}&period={period}", timeout=60)
+        return response
+
+    except Exception as e:
+        logger.error(f"❌ 损益表请求失败: {e}")
+        raise HTTPException(status_code=500, detail=f"损益表请求失败: {str(e)}")
+
+
+@app.get("/api/v1/market/history")
+async def market_history(symbol: str, period: str = "1y", interval: str = "1d"):
+    """获取价格历史数据"""
+    try:
+        if not data_service_client:
+            raise HTTPException(status_code=503, detail="数据服务不可用")
+
+        response = await data_service_client.get(f"/api/v1/market/history?symbol={symbol}&period={period}&interval={interval}", timeout=60)
+        return response
+
+    except Exception as e:
+        logger.error(f"❌ 价格历史请求失败: {e}")
+        raise HTTPException(status_code=500, detail=f"价格历史请求失败: {str(e)}")
+
+
+# ==================== Agent服务路由 ====================
+
+@app.get("/api/v1/agents")
+async def get_agents():
+    """获取智能体列表"""
+    try:
+        if not agent_service_client:
+            raise HTTPException(status_code=503, detail="Agent服务不可用")
+
+        response = await agent_service_client.get("/api/v1/agents")
+        return response
+
+    except Exception as e:
+        logger.error(f"❌ Agent服务请求失败: {e}")
+        raise HTTPException(status_code=500, detail=f"Agent服务请求失败: {str(e)}")
+
+
+@app.get("/api/v1/tasks")
+async def get_tasks():
+    """获取任务列表"""
+    try:
+        if not agent_service_client:
+            raise HTTPException(status_code=503, detail="Agent服务不可用")
+
+        response = await agent_service_client.get("/api/v1/tasks")
+        return response
+
+    except Exception as e:
+        logger.error(f"❌ Agent服务请求失败: {e}")
+        raise HTTPException(status_code=500, detail=f"Agent服务请求失败: {str(e)}")
+
+
 if __name__ == "__main__":
     import uvicorn
+    import sys
+    from pathlib import Path
 
-    config = get_service_config("api_gateway")
+    # 添加shared路径
+    shared_path = Path(__file__).parent.parent.parent / "shared"
+    sys.path.insert(0, str(shared_path))
+
+    from utils.config import get_config
+
+    config = get_config()
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
-        port=config['port'],
-        reload=config['debug'],
-        log_level=config['log_level'].lower()
+        port=config.get('API_GATEWAY_PORT', 8000),
+        reload=config.get('DEBUG', False),
+        log_level=config.get('LOG_LEVEL', 'INFO').lower()
     )

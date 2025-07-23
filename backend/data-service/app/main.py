@@ -1371,16 +1371,133 @@ async def get_enhanced_stock_data_formatted(
         )
 
 
+# ===== v1 API兼容性端点 (用于智能体调用) =====
+
+@app.get("/api/v1/market/data", response_model=APIResponse)
+async def get_market_data_v1(
+    market: str,
+    data_type: str = "US",
+    redis_client: Optional[redis.Redis] = Depends(get_redis)
+):
+    """获取市场数据 (v1兼容接口)"""
+    try:
+        # 将v1参数映射到现有的股票信息接口
+        return await get_stock_info(market, force_refresh=False, redis_client=redis_client)
+    except Exception as e:
+        logger.error(f"❌ 获取市场数据失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取市场数据失败: {str(e)}")
+
+@app.get("/api/v1/company/info", response_model=APIResponse)
+async def get_company_info_v1(
+    symbol: str,
+    redis_client: Optional[redis.Redis] = Depends(get_redis)
+):
+    """获取公司信息 (v1兼容接口)"""
+    try:
+        # 映射到现有的股票信息接口
+        return await get_stock_info(symbol, force_refresh=False, redis_client=redis_client)
+    except Exception as e:
+        logger.error(f"❌ 获取公司信息失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取公司信息失败: {str(e)}")
+
+@app.get("/api/v1/financial/income", response_model=APIResponse)
+async def get_financial_income_v1(
+    symbol: str,
+    period: str = "annual",
+    redis_client: Optional[redis.Redis] = Depends(get_redis)
+):
+    """获取损益表数据 (v1兼容接口)"""
+    try:
+        # 映射到现有的基本面数据接口
+        # 使用默认的日期范围
+        start_date = "2023-01-01"
+        end_date = "2024-12-31"
+        curr_date = "2024-12-31"
+        return await get_stock_fundamentals(symbol, start_date, end_date, curr_date, redis_client=redis_client)
+    except Exception as e:
+        logger.error(f"❌ 获取损益表失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取损益表失败: {str(e)}")
+
+@app.get("/api/v1/market/history", response_model=APIResponse)
+async def get_market_history_v1(
+    symbol: str,
+    period: str = "1y",
+    interval: str = "1d",
+    redis_client: Optional[redis.Redis] = Depends(get_redis)
+):
+    """获取价格历史数据 (v1兼容接口)"""
+    try:
+        # 使用独立的市场判断逻辑
+        import sys
+        from pathlib import Path
+
+        # 添加shared路径
+        shared_path = Path(__file__).parent.parent.parent / "shared"
+        sys.path.insert(0, str(shared_path))
+
+        from utils.stock_utils import StockUtils
+        from datetime import datetime
+
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        start_date = "2024-01-01"  # 默认开始日期
+
+        # 判断市场类型
+        market_info = StockUtils.get_market_info(symbol)
+
+        if market_info['is_us']:
+            # 美股：目前返回占位符，后续可接入美股数据源
+            return APIResponse(
+                success=True,
+                message=f"获取{symbol}价格历史成功",
+                data={
+                    "symbol": symbol,
+                    "market": "US",
+                    "start_date": start_date,
+                    "end_date": current_date,
+                    "period": period,
+                    "interval": interval,
+                    "message": "美股数据接口开发中，请使用现有的股票数据接口"
+                }
+            )
+        elif market_info['is_china'] or market_info['is_hk']:
+            # A股/港股：调用现有的股票数据接口
+            request = StockDataRequest(
+                symbol=symbol,
+                start_date=start_date,
+                end_date=current_date,
+                period=interval
+            )
+            return await get_stock_data(request, redis_client=redis_client)
+        else:
+            # 未知市场
+            return APIResponse(
+                success=False,
+                message=f"无法识别股票市场: {symbol}",
+                data={"symbol": symbol, "market": "UNKNOWN"}
+            )
+    except Exception as e:
+        logger.error(f"❌ 获取价格历史失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取价格历史失败: {str(e)}")
+
+
 if __name__ == "__main__":
     import uvicorn
+    import sys
+    from pathlib import Path
 
-    config = get_service_config("data_service")
+    # 添加shared路径
+    shared_path = Path(__file__).parent.parent.parent / "shared"
+    sys.path.insert(0, str(shared_path))
+
+    from utils.config import get_config
+
+    config = get_config()
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
-        port=config['port'],
+        port=config.get('DATA_SERVICE_PORT', 8002),
         reload=False,  # 暂时关闭reload避免频繁监控日志
-        log_level=config['log_level'].lower(),
+        log_level=config.get('LOG_LEVEL', 'INFO').lower(),
         reload_excludes=[
             "logs/*",
             "results/*",

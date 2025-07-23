@@ -2,6 +2,7 @@
 配置管理工具
 """
 import os
+from pathlib import Path
 from typing import Optional, Dict, Any
 from functools import lru_cache
 
@@ -11,21 +12,61 @@ class Config:
     
     def __init__(self):
         self._config = {}
+        self._load_backend_env_files()
         self._load_env_config()
-    
+
+    def _load_backend_env_files(self):
+        """加载backend环境配置文件"""
+        # 获取backend目录路径
+        backend_dir = Path(__file__).parent.parent.parent
+        backend_env_file = backend_dir / ".backend_env"
+
+        if backend_env_file.exists():
+            print(f"✅ 加载Backend环境变量: {backend_env_file}")
+            self._load_env_file(backend_env_file)
+        else:
+            print(f"⚠️ Backend环境文件不存在: {backend_env_file}")
+
+    def _load_env_file(self, env_file_path: Path):
+        """加载指定的.env文件"""
+        try:
+            with open(env_file_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        key, value = line.split('=', 1)
+                        key = key.strip()
+                        value = value.strip()
+                        # 移除引号
+                        if value.startswith('"') and value.endswith('"'):
+                            value = value[1:-1]
+                        elif value.startswith("'") and value.endswith("'"):
+                            value = value[1:-1]
+                        os.environ[key] = value
+        except Exception as e:
+            print(f"❌ 加载环境文件失败 {env_file_path}: {e}")
+
     def _load_env_config(self):
         """从环境变量加载配置"""
         # 服务配置
         self._config.update({
             # 服务端口
             'API_GATEWAY_PORT': int(os.getenv('API_GATEWAY_PORT', '8000')),
-            'ANALYSIS_ENGINE_PORT': int(os.getenv('ANALYSIS_ENGINE_PORT', '8001')),
+            'ANALYSIS_ENGINE_PORT': int(os.getenv('ANALYSIS_ENGINE_PORT', '8002')),
             'DATA_SERVICE_PORT': int(os.getenv('DATA_SERVICE_PORT', '8002')),
-            
+            'TASK_SCHEDULER_PORT': int(os.getenv('TASK_SCHEDULER_PORT', '8003')),
+            'LLM_SERVICE_PORT': int(os.getenv('LLM_SERVICE_PORT', '8004')),
+            'MEMORY_SERVICE_PORT': int(os.getenv('MEMORY_SERVICE_PORT', '8006')),
+            'AGENT_SERVICE_PORT': int(os.getenv('AGENT_SERVICE_PORT', '8008')),
+
             # 服务地址
             'API_GATEWAY_HOST': os.getenv('API_GATEWAY_HOST', 'localhost'),
             'ANALYSIS_ENGINE_HOST': os.getenv('ANALYSIS_ENGINE_HOST', 'localhost'),
             'DATA_SERVICE_HOST': os.getenv('DATA_SERVICE_HOST', 'localhost'),
+            'TASK_SCHEDULER_HOST': os.getenv('TASK_SCHEDULER_HOST', 'localhost'),
+            'LLM_SERVICE_HOST': os.getenv('LLM_SERVICE_HOST', 'localhost'),
+            'MEMORY_SERVICE_HOST': os.getenv('MEMORY_SERVICE_HOST', 'localhost'),
+            'AGENT_SERVICE_HOST': os.getenv('AGENT_SERVICE_HOST', 'localhost'),
             
             # 数据库配置
             'REDIS_URL': os.getenv('REDIS_URL', 'redis://localhost:6379'),

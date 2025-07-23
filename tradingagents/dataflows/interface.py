@@ -1590,7 +1590,7 @@ def get_stock_data_by_market(symbol: str, start_date: str = None, end_date: str 
         str: 格式化的股票数据
     """
     try:
-        from .utils.stock_utils import StockUtils
+        from tradingagents.utils.stock_utils import StockUtils
 
         market_info = StockUtils.get_market_info(symbol)
 

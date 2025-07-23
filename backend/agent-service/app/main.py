@@ -92,12 +92,66 @@ async def lifespan(app: FastAPI):
             state_manager = None
             agent_manager = None
 
-        # 暂时注释掉其他复杂的初始化逻辑
-        # TODO: 实现其他组件的初始化
-        if agent_manager is None:
-            logger.info("⚠️ 使用简化模式启动，部分功能暂不可用")
+        # 初始化其他组件
+        if agent_manager is not None and state_manager is not None:
+            try:
+                # 导入组件类
+                from .utils.message_router import MessageRouter
+                from .utils.performance_monitor import PerformanceMonitor
+                from .orchestration.collaboration_engine import CollaborationEngine
+                from .orchestration.debate_engine import DebateEngine
+                from .orchestration.consensus_algorithm import ConsensusAlgorithm
+                from .orchestration.workflow_manager import WorkflowManager
+
+                # 初始化MessageRouter
+                global message_router
+                message_router = MessageRouter(redis_client)
+                await message_router.initialize()
+                logger.info("✅ MessageRouter 初始化成功")
+
+                # 初始化PerformanceMonitor
+                global performance_monitor
+                performance_monitor = PerformanceMonitor(state_manager)
+                await performance_monitor.initialize()
+                logger.info("✅ PerformanceMonitor 初始化成功")
+
+                # 初始化CollaborationEngine
+                global collaboration_engine
+                collaboration_engine = CollaborationEngine(agent_manager, state_manager, message_router)
+                await collaboration_engine.initialize()
+                logger.info("✅ CollaborationEngine 初始化成功")
+
+                # 初始化DebateEngine
+                global debate_engine
+                debate_engine = DebateEngine(agent_manager, state_manager, message_router)
+                await debate_engine.initialize()
+                logger.info("✅ DebateEngine 初始化成功")
+
+                # 初始化ConsensusAlgorithm
+                global consensus_algorithm
+                consensus_algorithm = ConsensusAlgorithm(agent_manager, state_manager)
+                await consensus_algorithm.initialize()
+                logger.info("✅ ConsensusAlgorithm 初始化成功")
+
+                # 初始化WorkflowManager
+                global workflow_manager
+                workflow_manager = WorkflowManager(agent_manager, state_manager, collaboration_engine)
+                await workflow_manager.initialize()
+                logger.info("✅ WorkflowManager 初始化成功")
+
+                logger.info("✅ 所有组件初始化成功")
+
+            except Exception as e:
+                logger.error(f"❌ 高级组件初始化失败: {e}")
+                # 设置为None以确保健康检查正确反映状态
+                collaboration_engine = None
+                debate_engine = None
+                consensus_algorithm = None
+                message_router = None
+                workflow_manager = None
+                performance_monitor = None
         else:
-            logger.info("✅ 核心功能已启用")
+            logger.info("⚠️ 使用简化模式启动，部分功能暂不可用")
 
         logger.info("✅ Agent Service启动完成")
         
@@ -188,19 +242,28 @@ async def root():
 async def health_check():
     """健康检查"""
     try:
-        # 检查各组件状态
-        components_status = {
+        # 检查核心组件状态（只检查已实现的组件）
+        core_components = {
             "agent_manager": agent_manager is not None and await agent_manager.health_check(),
-            "collaboration_engine": collaboration_engine is not None and await collaboration_engine.health_check(),
-            "debate_engine": debate_engine is not None and await debate_engine.health_check(),
-            "consensus_algorithm": consensus_algorithm is not None and await consensus_algorithm.health_check(),
             "state_manager": state_manager is not None and await state_manager.health_check(),
-            "message_router": message_router is not None and await message_router.health_check(),
-            "workflow_manager": workflow_manager is not None and await workflow_manager.health_check(),
-            "performance_monitor": performance_monitor is not None and await performance_monitor.health_check()
         }
 
-        all_healthy = all(components_status.values())
+        # 检查可选组件状态（未实现的组件不影响整体健康状态）
+        optional_components = {
+            "collaboration_engine": collaboration_engine is not None and (await collaboration_engine.health_check() if collaboration_engine else False),
+            "debate_engine": debate_engine is not None and (await debate_engine.health_check() if debate_engine else False),
+            "consensus_algorithm": consensus_algorithm is not None and (await consensus_algorithm.health_check() if consensus_algorithm else False),
+            "message_router": message_router is not None and (await message_router.health_check() if message_router else False),
+            "workflow_manager": workflow_manager is not None and (await workflow_manager.health_check() if workflow_manager else False),
+            "performance_monitor": performance_monitor is not None and (await performance_monitor.health_check() if performance_monitor else False)
+        }
+
+        # 合并所有组件状态
+        components_status = {**core_components, **optional_components}
+
+        # 只要核心组件健康就认为服务健康
+        core_healthy = all(core_components.values())
+        all_healthy = core_healthy
 
         return {
             "status": "healthy" if all_healthy else "degraded",
@@ -236,10 +299,20 @@ app.include_router(monitoring_router, prefix="/api/v1/monitoring", tags=["monito
 
 
 if __name__ == "__main__":
+    import sys
+    from pathlib import Path
+
+    # 添加shared路径
+    shared_path = Path(__file__).parent.parent.parent / "shared"
+    sys.path.insert(0, str(shared_path))
+
+    from utils.config import get_config
+
+    config = get_config()
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
-        port=8008,
-        reload=True,
-        log_level="info"
+        port=config.get('AGENT_SERVICE_PORT', 8008),
+        reload=config.get('DEBUG', False),
+        log_level=config.get('LOG_LEVEL', 'INFO').lower()
     )

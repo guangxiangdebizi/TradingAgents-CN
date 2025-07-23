@@ -328,10 +328,20 @@ async def reload_service():
         raise HTTPException(status_code=500, detail=f"服务重新加载失败: {str(e)}")
 
 if __name__ == "__main__":
+    import sys
+    from pathlib import Path
+
+    # 添加shared路径
+    shared_path = Path(__file__).parent.parent.parent / "shared"
+    sys.path.insert(0, str(shared_path))
+
+    from utils.config import get_config
+
+    config = get_config()
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
-        port=8006,
-        reload=True,
-        log_level="info"
+        port=config.get('MEMORY_SERVICE_PORT', 8006),
+        reload=config.get('DEBUG', False),
+        log_level=config.get('LOG_LEVEL', 'INFO').lower()
     )
