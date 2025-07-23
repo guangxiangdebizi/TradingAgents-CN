@@ -267,9 +267,13 @@ class BaseAgent(ABC):
                 return False
             
             # 检查是否长时间无响应
-            time_since_activity = (datetime.now() - self.metrics.last_activity).total_seconds()
-            if time_since_activity > 3600:  # 1小时无活动
-                logger.warning(f"⚠️ {self.agent_type.value} 长时间无活动: {time_since_activity:.0f}s")
+            if self.metrics.last_activity is not None:
+                time_since_activity = (datetime.now() - self.metrics.last_activity).total_seconds()
+                if time_since_activity > 3600:  # 1小时无活动
+                    logger.warning(f"⚠️ {self.agent_type.value} 长时间无活动: {time_since_activity:.0f}s")
+            else:
+                # 如果从未有活动，初始化last_activity
+                self.metrics.last_activity = datetime.now()
             
             return True
             
@@ -291,10 +295,16 @@ class BaseAgent(ABC):
             "last_heartbeat": self.last_heartbeat.isoformat()
         }
     
-    def can_handle_task(self, task_type: TaskType, market: str = "US") -> bool:
+    def can_handle_task(self, task_type, market: str = "US") -> bool:
         """检查是否能处理指定任务"""
+        # 处理不同类型的task_type参数
+        if hasattr(task_type, 'value'):
+            task_type_str = task_type.value
+        else:
+            task_type_str = str(task_type)
+
         for capability in self.capabilities:
-            if (task_type.value in capability.name.lower() and 
+            if (task_type_str.lower() in capability.name.lower() and
                 market in capability.supported_markets):
                 return True
         return False

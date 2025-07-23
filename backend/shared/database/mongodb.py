@@ -28,10 +28,30 @@ class MongoDBManager:
     async def connect(self) -> bool:
         """连接到 MongoDB"""
         try:
+            # 优先使用完整的 MONGODB_URL
             mongodb_url = self.config.get('MONGODB_URL')
+
+            # 如果没有完整URL，从分开的配置项构建
             if not mongodb_url:
-                logger.error("❌ MongoDB URL 未配置")
+                host = self.config.get('MONGODB_HOST', 'localhost')
+                port = self.config.get('MONGODB_PORT', '27017')
+                username = self.config.get('MONGODB_USERNAME')
+                password = self.config.get('MONGODB_PASSWORD')
+                database = self.config.get('MONGODB_DATABASE', 'tradingagents')
+                auth_source = self.config.get('MONGODB_AUTH_SOURCE', 'admin')
+
+                if username and password:
+                    mongodb_url = f"mongodb://{username}:{password}@{host}:{port}/{database}?authSource={auth_source}"
+                else:
+                    mongodb_url = f"mongodb://{host}:{port}/{database}"
+
+            if not mongodb_url:
+                logger.error("❌ MongoDB 配置不完整")
                 return False
+
+            # 调试：打印连接字符串（隐藏密码）
+            safe_url = mongodb_url.replace(password or '', '***') if password else mongodb_url
+            logger.info(f"🔗 尝试连接MongoDB: {safe_url}")
             
             # 创建客户端
             self.client = AsyncIOMotorClient(
@@ -70,7 +90,7 @@ class MongoDBManager:
     
     def get_collection(self, collection_name: str) -> Optional[AsyncIOMotorCollection]:
         """获取集合"""
-        if not self.is_connected() or not self.db:
+        if not self.is_connected() or self.db is None:
             return None
         return self.db[collection_name]
 

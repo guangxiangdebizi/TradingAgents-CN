@@ -298,7 +298,7 @@ class AgentManager:
     async def _save_agent_to_db(self, agent: BaseAgent):
         """保存到数据库"""
         try:
-            if self.db_manager.is_mongodb_available():
+            if self.db_manager.is_connected():
                 collection = self.db_manager.get_collection("agents")
                 await collection.insert_one(agent.get_status())
         except Exception as e:
@@ -307,7 +307,7 @@ class AgentManager:
     async def _remove_agent_from_db(self, agent_id: str):
         """从数据库移除"""
         try:
-            if self.db_manager.is_mongodb_available():
+            if self.db_manager.is_connected():
                 collection = self.db_manager.get_collection("agents")
                 await collection.delete_one({"agent_id": agent_id})
         except Exception as e:
@@ -316,7 +316,7 @@ class AgentManager:
     async def _record_task_result(self, result: TaskResult):
         """记录任务结果"""
         try:
-            if self.db_manager.is_mongodb_available():
+            if self.db_manager.is_connected():
                 collection = self.db_manager.get_collection("task_results")
                 await collection.insert_one(result.to_dict())
         except Exception as e:

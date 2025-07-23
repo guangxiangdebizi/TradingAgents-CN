@@ -14,11 +14,11 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 from backend.shared.logging_config import get_logger
-from backend.agent_service.app.agents.base_agent import AgentType, TaskContext
-from backend.agent_service.app.agents.analysts.fundamentals_analyst import FundamentalsAnalyst
-from backend.agent_service.app.agents.analysts.market_analyst import MarketAnalyst
-from backend.agent_service.app.agents.researchers.bull_researcher import BullResearcher
-from backend.agent_service.app.agents.researchers.bear_researcher import BearResearcher
+from app.agents.base_agent import AgentType, TaskContext
+from app.agents.analysts.fundamentals_analyst import FundamentalsAnalyst
+from app.agents.analysts.market_analyst import MarketAnalyst
+from app.agents.researchers.bull_researcher import BullResearcher
+from app.agents.researchers.bear_researcher import BearResearcher
 
 logger = get_logger("agent-service.test")
 

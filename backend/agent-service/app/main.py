@@ -25,8 +25,10 @@ from backend.shared.utils.config import get_service_config
 from backend.shared.database.mongodb import get_db_manager
 import redis.asyncio as redis
 
-# 暂时注释掉复杂的导入，先测试基本功能
-# from .agents.agent_manager import AgentManager
+# 导入核心组件
+from .agents.agent_manager import AgentManager
+from .utils.state_manager import StateManager
+# 暂时注释掉其他复杂组件，先启用基础功能
 # from .orchestration.collaboration_engine import CollaborationEngine
 # from .orchestration.debate_engine import DebateEngine
 # from .orchestration.consensus_algorithm import ConsensusAlgorithm
@@ -40,8 +42,9 @@ import redis.asyncio as redis
 logger = get_service_logger("agent-service")
 service_config = get_service_config("agent-service")
 
-# 全局组件 - 暂时使用Any类型
-agent_manager: Optional[Any] = None
+# 全局组件
+agent_manager: Optional[AgentManager] = None
+state_manager: Optional[StateManager] = None
 collaboration_engine: Optional[Any] = None
 debate_engine: Optional[Any] = None
 consensus_algorithm: Optional[Any] = None
@@ -73,9 +76,28 @@ async def lifespan(app: FastAPI):
             logger.warning(f"⚠️ Redis 连接失败: {e}")
             redis_client = None
         
-        # 暂时注释掉复杂的初始化逻辑，先测试基本功能
-        # TODO: 实现完整的组件初始化
-        logger.info("⚠️ 使用简化模式启动，部分功能暂不可用")
+        # 初始化StateManager
+        try:
+            global state_manager, agent_manager
+            state_manager = StateManager(db_manager, redis_client)
+            await state_manager.initialize()
+            logger.info("✅ StateManager 初始化成功")
+
+            # 初始化AgentManager
+            agent_manager = AgentManager(db_manager, redis_client, state_manager)
+            await agent_manager.initialize()
+            logger.info("✅ AgentManager 初始化成功")
+        except Exception as e:
+            logger.error(f"❌ 组件初始化失败: {e}")
+            state_manager = None
+            agent_manager = None
+
+        # 暂时注释掉其他复杂的初始化逻辑
+        # TODO: 实现其他组件的初始化
+        if agent_manager is None:
+            logger.info("⚠️ 使用简化模式启动，部分功能暂不可用")
+        else:
+            logger.info("✅ 核心功能已启用")
 
         logger.info("✅ Agent Service启动完成")
         
@@ -114,8 +136,8 @@ app.add_middleware(
 )
 
 
-# 依赖注入 - 简化版本
-def get_agent_manager() -> Any:
+# 依赖注入
+def get_agent_manager() -> AgentManager:
     if agent_manager is None:
         raise HTTPException(status_code=503, detail="Agent Manager未初始化")
     return agent_manager

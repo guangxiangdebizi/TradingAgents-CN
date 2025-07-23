@@ -10,8 +10,8 @@ from datetime import datetime, timedelta
 from dataclasses import asdict
 
 from backend.shared.logging_config import get_logger
-from backend.shared.database import DatabaseManager
-from backend.shared.redis_client import RedisClient
+from backend.shared.database.mongodb import MongoDBManager
+import redis.asyncio as redis
 
 logger = get_logger("agent-service.state_manager")
 
@@ -19,7 +19,7 @@ logger = get_logger("agent-service.state_manager")
 class StateManager:
     """状态管理器"""
     
-    def __init__(self, db_manager: DatabaseManager, redis_client: RedisClient):
+    def __init__(self, db_manager: MongoDBManager, redis_client: redis.Redis):
         self.db_manager = db_manager
         self.redis_client = redis_client
         
@@ -59,7 +59,7 @@ class StateManager:
     async def _load_states_from_db(self):
         """从数据库加载状态"""
         try:
-            if not self.db_manager.is_mongodb_available():
+            if not self.db_manager.is_connected():
                 logger.warning("⚠️ MongoDB不可用，跳过状态加载")
                 return
             
@@ -123,7 +123,7 @@ class StateManager:
                 return state
             
             # 从数据库获取
-            if self.db_manager.is_mongodb_available():
+            if self.db_manager.is_connected():
                 collection = self.db_manager.get_collection("agent_states")
                 state = await collection.find_one({"agent_id": agent_id})
                 if state:
@@ -172,7 +172,7 @@ class StateManager:
                 return state
             
             # 从数据库获取
-            if self.db_manager.is_mongodb_available():
+            if self.db_manager.is_connected():
                 collection = self.db_manager.get_collection("task_states")
                 state = await collection.find_one({"task_id": task_id})
                 if state:
@@ -221,7 +221,7 @@ class StateManager:
                 return state
             
             # 从数据库获取
-            if self.db_manager.is_mongodb_available():
+            if self.db_manager.is_connected():
                 collection = self.db_manager.get_collection("workflow_states")
                 state = await collection.find_one({"workflow_id": workflow_id})
                 if state:
@@ -251,7 +251,7 @@ class StateManager:
             await self.redis_client.delete(f"{state_type}_state:{state_id}")
             
             # 从数据库删除
-            if self.db_manager.is_mongodb_available():
+            if self.db_manager.is_connected():
                 collection = self.db_manager.get_collection(f"{state_type}_states")
                 await collection.delete_one({f"{state_type}_id": state_id})
             
@@ -281,7 +281,7 @@ class StateManager:
                     states.append(state)
             
             # 如果内存缓存结果不足，从数据库查询
-            if len(states) < filters.get("limit", 100) and self.db_manager.is_mongodb_available():
+            if len(states) < filters.get("limit", 100) and self.db_manager.is_connected():
                 collection = self.db_manager.get_collection(f"{state_type}_states")
                 async for state in collection.find(filters):
                     state.pop("_id", None)
@@ -373,7 +373,7 @@ class StateManager:
     async def _sync_states_to_db(self):
         """同步状态到数据库"""
         try:
-            if not self.db_manager.is_mongodb_available():
+            if not self.db_manager.is_connected():
                 return
             
             # 同步智能体状态
@@ -418,7 +418,7 @@ class StateManager:
             await self.redis_client.ping()
             
             # 检查数据库连接
-            if self.db_manager.is_mongodb_available():
+            if self.db_manager.is_connected():
                 await self.db_manager.get_collection("health_check").find_one({})
             
             return True
