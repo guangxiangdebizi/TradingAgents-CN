@@ -27,8 +27,8 @@ class Trader(BaseAgent):
         """定义智能体能力"""
         return [
             AgentCapability(
-                name="trading_execution",
-                description="交易执行 - 根据分析结果制定和执行交易策略",
+                name="trading_decision",
+                description="交易决策 - 根据分析结果制定和执行交易策略",
                 required_tools=["order_management", "position_tracking"],
                 supported_markets=["US", "CN", "HK"],
                 max_concurrent_tasks=3,

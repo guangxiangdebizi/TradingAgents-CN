@@ -9,35 +9,39 @@ from ..adapters.base import BaseLLMAdapter
 
 logger = logging.getLogger(__name__)
 
-# 任务类型到模型的映射
+# 任务类型到模型的映射 (专注于股票分析和工具调用)
 TASK_MODEL_MAPPING = {
     "financial_analysis": {
-        "primary": ["deepseek-chat", "gpt-4"],
-        "fallback": ["qwen-plus", "gpt-3.5-turbo"]
+        "primary": ["deepseek-chat", "qwen-plus", "gpt-4", "gemini-pro"],
+        "fallback": ["gpt-3.5-turbo", "qwen-turbo", "gemini-1.5-flash"]
     },
-    "code_generation": {
-        "primary": ["deepseek-coder", "gpt-4"],
-        "fallback": ["qwen-coder", "claude-3"]
+    "stock_analysis": {
+        "primary": ["deepseek-chat", "qwen-plus", "gpt-4"],
+        "fallback": ["gemini-pro", "gpt-3.5-turbo"]
+    },
+    "tool_calling": {
+        "primary": ["gpt-4", "deepseek-chat", "qwen-plus"],
+        "fallback": ["gemini-pro", "gpt-3.5-turbo"]
     },
     "data_extraction": {
-        "primary": ["gpt-4", "qwen-plus"],
-        "fallback": ["gpt-3.5-turbo", "deepseek-chat"]
+        "primary": ["gpt-4", "qwen-plus", "gemini-pro"],
+        "fallback": ["deepseek-chat", "gpt-3.5-turbo"]
     },
-    "translation": {
-        "primary": ["qwen-plus", "gpt-4"],
-        "fallback": ["deepseek-chat"]
+    "market_research": {
+        "primary": ["qwen-plus", "deepseek-chat", "gpt-4"],
+        "fallback": ["gemini-pro", "gpt-3.5-turbo"]
     },
     "reasoning": {
-        "primary": ["deepseek-chat", "gpt-4"],
-        "fallback": ["qwen-plus"]
+        "primary": ["deepseek-chat", "gpt-4", "gemini-pro"],
+        "fallback": ["qwen-plus", "gpt-3.5-turbo"]
     },
     "chinese_tasks": {
-        "primary": ["qwen-plus", "deepseek-chat"],
-        "fallback": ["gpt-4"]
+        "primary": ["qwen-plus", "deepseek-chat", "qwen-turbo"],
+        "fallback": ["gpt-4", "gemini-pro"]
     },
     "general": {
-        "primary": ["deepseek-chat", "gpt-4", "qwen-plus"],
-        "fallback": ["gpt-3.5-turbo"]
+        "primary": ["deepseek-chat", "qwen-plus", "gpt-4", "gemini-pro"],
+        "fallback": ["gpt-3.5-turbo", "qwen-turbo", "gemini-1.5-flash"]
     }
 }
 
@@ -100,7 +104,37 @@ class ModelRouter:
         # 6. 没有可用模型
         available_models = list(self.adapters.keys())
         raise Exception(f"没有可用的模型。任务类型: {task_type}, 可用模型: {available_models}")
-    
+
+    async def select_stock_analysis_model(self, analysis_type: str = "general") -> str:
+        """
+        为股票分析选择最佳模型
+
+        Args:
+            analysis_type: 分析类型 (technical, fundamental, sentiment, general)
+        """
+        # 根据分析类型选择最佳模型
+        if analysis_type == "technical":
+            # 技术分析：需要数学计算和图表理解
+            preferred_models = ["gpt-4", "deepseek-chat", "qwen-plus"]
+        elif analysis_type == "fundamental":
+            # 基本面分析：需要财务数据理解
+            preferred_models = ["deepseek-chat", "qwen-plus", "gpt-4"]
+        elif analysis_type == "sentiment":
+            # 情感分析：需要文本理解
+            preferred_models = ["qwen-plus", "deepseek-chat", "gemini-pro"]
+        else:
+            # 通用股票分析
+            preferred_models = ["deepseek-chat", "qwen-plus", "gpt-4", "gemini-pro"]
+
+        # 选择第一个可用的模型
+        for model in preferred_models:
+            if model in self.adapters and await self._is_model_healthy(model):
+                logger.info(f"🏦 选择股票分析模型: {model} (分析类型: {analysis_type})")
+                return model
+
+        # 降级到通用选择
+        return await self.select_model("financial_analysis")
+
     async def _is_model_healthy(self, model: str) -> bool:
         """检查模型健康状态"""
         try:

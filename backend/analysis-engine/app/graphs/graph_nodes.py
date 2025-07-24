@@ -10,7 +10,7 @@ from datetime import datetime
 
 from .graph_state import GraphState
 from ..tools.toolkit_manager import ToolkitManager
-from ..agents.agent_factory import AgentFactory
+from .agent_nodes import AgentNodes
 from ..memory.memory_client import MemoryClient
 
 logger = logging.getLogger(__name__)
@@ -18,10 +18,10 @@ logger = logging.getLogger(__name__)
 class GraphNodes:
     """图节点类"""
     
-    def __init__(self, toolkit_manager: ToolkitManager, agent_factory: AgentFactory,
+    def __init__(self, toolkit_manager: ToolkitManager, agent_nodes: AgentNodes,
                  memory_client: Optional[MemoryClient] = None):
         self.toolkit_manager = toolkit_manager
-        self.agent_factory = agent_factory
+        self.agent_nodes = agent_nodes
         self.memory_client = memory_client
         self.initialized = False
     
@@ -91,22 +91,8 @@ class GraphNodes:
             
             state["current_step"] = "fundamentals_analysis"
             
-            # 调用基本面分析师
-            agent_result = await self.agent_factory.call_agent(
-                agent_type="fundamentals_analyst",
-                symbol=state["symbol"],
-                company_name=state["company_name"],
-                financial_data=state.get("financial_data"),
-                market_data=state.get("market_data"),
-                current_date=state["current_date"]
-            )
-            
-            if agent_result.get("success"):
-                state["fundamentals_report"] = agent_result.get("report", "")
-                state["messages"].extend(agent_result.get("messages", []))
-            else:
-                state["errors"].append(f"基本面分析失败: {agent_result.get('error', 'Unknown error')}")
-            
+            # 调用基本面分析师节点
+            state = await self.agent_nodes.fundamentals_analyst_node(state)
             state["completed_steps"].append("fundamentals_analysis")
             
             logger.info(f"✅ 基本面分析完成: {state['symbol']}")
@@ -124,22 +110,8 @@ class GraphNodes:
             
             state["current_step"] = "technical_analysis"
             
-            # 调用技术分析师
-            agent_result = await self.agent_factory.call_agent(
-                agent_type="technical_analyst",
-                symbol=state["symbol"],
-                company_name=state["company_name"],
-                stock_data=state.get("stock_data"),
-                market_data=state.get("market_data"),
-                current_date=state["current_date"]
-            )
-            
-            if agent_result.get("success"):
-                state["technical_report"] = agent_result.get("report", "")
-                state["messages"].extend(agent_result.get("messages", []))
-            else:
-                state["errors"].append(f"技术分析失败: {agent_result.get('error', 'Unknown error')}")
-            
+            # 调用市场分析师节点（技术分析）
+            state = await self.agent_nodes.market_analyst_node(state)
             state["completed_steps"].append("technical_analysis")
             
             logger.info(f"✅ 技术分析完成: {state['symbol']}")
@@ -157,22 +129,8 @@ class GraphNodes:
             
             state["current_step"] = "news_analysis"
             
-            # 调用新闻分析师
-            agent_result = await self.agent_factory.call_agent(
-                agent_type="news_analyst",
-                symbol=state["symbol"],
-                company_name=state["company_name"],
-                news_data=state.get("news_data"),
-                current_date=state["current_date"]
-            )
-            
-            if agent_result.get("success"):
-                state["news_report"] = agent_result.get("report", "")
-                state["sentiment_report"] = agent_result.get("sentiment", "")
-                state["messages"].extend(agent_result.get("messages", []))
-            else:
-                state["errors"].append(f"新闻分析失败: {agent_result.get('error', 'Unknown error')}")
-            
+            # 调用新闻分析师节点
+            state = await self.agent_nodes.news_analyst_node(state)
             state["completed_steps"].append("news_analysis")
             
             logger.info(f"✅ 新闻分析完成: {state['symbol']}")
@@ -190,24 +148,8 @@ class GraphNodes:
             
             state["current_step"] = "bull_analysis"
             
-            # 调用看涨研究员
-            agent_result = await self.agent_factory.call_agent(
-                agent_type="bull_researcher",
-                symbol=state["symbol"],
-                company_name=state["company_name"],
-                fundamentals_report=state.get("fundamentals_report"),
-                technical_report=state.get("technical_report"),
-                news_report=state.get("news_report"),
-                bear_argument=state.get("bear_analysis"),
-                current_date=state["current_date"]
-            )
-            
-            if agent_result.get("success"):
-                state["bull_analysis"] = agent_result.get("analysis", "")
-                state["messages"].extend(agent_result.get("messages", []))
-            else:
-                state["errors"].append(f"看涨分析失败: {agent_result.get('error', 'Unknown error')}")
-            
+            # 调用多头研究员节点
+            state = await self.agent_nodes.bull_researcher_node(state)
             state["completed_steps"].append("bull_analysis")
             
             logger.info(f"✅ 看涨分析完成: {state['symbol']}")
@@ -225,24 +167,8 @@ class GraphNodes:
             
             state["current_step"] = "bear_analysis"
             
-            # 调用看跌研究员
-            agent_result = await self.agent_factory.call_agent(
-                agent_type="bear_researcher",
-                symbol=state["symbol"],
-                company_name=state["company_name"],
-                fundamentals_report=state.get("fundamentals_report"),
-                technical_report=state.get("technical_report"),
-                news_report=state.get("news_report"),
-                bull_argument=state.get("bull_analysis"),
-                current_date=state["current_date"]
-            )
-            
-            if agent_result.get("success"):
-                state["bear_analysis"] = agent_result.get("analysis", "")
-                state["messages"].extend(agent_result.get("messages", []))
-            else:
-                state["errors"].append(f"看跌分析失败: {agent_result.get('error', 'Unknown error')}")
-            
+            # 调用空头研究员节点
+            state = await self.agent_nodes.bear_researcher_node(state)
             state["completed_steps"].append("bear_analysis")
             
             logger.info(f"✅ 看跌分析完成: {state['symbol']}")
@@ -260,23 +186,8 @@ class GraphNodes:
             
             state["current_step"] = "risk_assessment"
             
-            # 调用风险管理师
-            agent_result = await self.agent_factory.call_agent(
-                agent_type="risk_manager",
-                symbol=state["symbol"],
-                company_name=state["company_name"],
-                fundamentals_report=state.get("fundamentals_report"),
-                technical_report=state.get("technical_report"),
-                market_data=state.get("market_data"),
-                current_date=state["current_date"]
-            )
-            
-            if agent_result.get("success"):
-                state["risk_assessment"] = agent_result.get("assessment", "")
-                state["messages"].extend(agent_result.get("messages", []))
-            else:
-                state["errors"].append(f"风险评估失败: {agent_result.get('error', 'Unknown error')}")
-            
+            # 调用风险管理师节点
+            state = await self.agent_nodes.risk_manager_node(state)
             state["completed_steps"].append("risk_assessment")
             
             logger.info(f"✅ 风险评估完成: {state['symbol']}")
@@ -294,26 +205,8 @@ class GraphNodes:
             
             state["current_step"] = "final_decision"
             
-            # 调用研究主管
-            agent_result = await self.agent_factory.call_agent(
-                agent_type="research_manager",
-                symbol=state["symbol"],
-                company_name=state["company_name"],
-                fundamentals_report=state.get("fundamentals_report"),
-                technical_report=state.get("technical_report"),
-                bull_analysis=state.get("bull_analysis"),
-                bear_analysis=state.get("bear_analysis"),
-                risk_assessment=state.get("risk_assessment"),
-                current_date=state["current_date"]
-            )
-            
-            if agent_result.get("success"):
-                state["final_recommendation"] = agent_result.get("recommendation", "")
-                state["investment_plan"] = agent_result.get("plan", "")
-                state["messages"].extend(agent_result.get("messages", []))
-            else:
-                state["errors"].append(f"最终决策失败: {agent_result.get('error', 'Unknown error')}")
-            
+            # 调用研究经理节点
+            state = await self.agent_nodes.research_manager_node(state)
             state["completed_steps"].append("final_decision")
             
             logger.info(f"✅ 最终决策完成: {state['symbol']}")

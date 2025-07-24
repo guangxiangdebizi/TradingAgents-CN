@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import httpx
 from typing import Optional, Dict, Any
+from datetime import datetime
 
 # 导入共享模块
 from backend.shared.models.analysis import (
@@ -191,23 +192,120 @@ async def start_analysis(request: AnalysisRequest, background_tasks: BackgroundT
     try:
         if not analysis_engine_client:
             raise HTTPException(status_code=503, detail="分析引擎服务不可用")
-        
+
         logger.info(f"🚀 转发分析请求: {request.stock_code}")
-        
+
         # 转发到分析引擎
         response = await analysis_engine_client.post(
             "/api/analysis/start",
             data=request.model_dump(mode='json')  # 使用json模式确保datetime序列化
         )
-        
+
         return APIResponse(**response)
-        
+
     except httpx.HTTPError as e:
-        logger.error(f"❌ 分析引擎请求失败: {e}")
+        # 判断是否为连接错误或超时错误
+        if isinstance(e, (httpx.ConnectError, httpx.TimeoutException)):
+            logger.critical(f"🚨 严重告警: Agent Service不可达 - 无法启动分析")
+            logger.critical(f"🚨 请检查Agent Service是否启动并可访问")
+            logger.critical(f"🚨 错误详情: {type(e).__name__}: {str(e)}")
+        else:
+            logger.error(f"❌ 分析引擎请求失败: {e}")
         raise HTTPException(status_code=503, detail="分析引擎服务异常")
     except Exception as e:
         logger.error(f"❌ 启动分析失败: {e}")
         raise HTTPException(status_code=500, detail=f"启动分析失败: {str(e)}")
+
+
+@app.post("/api/v1/analysis/comprehensive", response_model=APIResponse)
+async def start_comprehensive_analysis(request: Request):
+    """启动综合分析 - CLI专用接口"""
+    try:
+        if not analysis_engine_client:
+            raise HTTPException(status_code=503, detail="分析引擎服务不可用")
+
+        # 获取请求体
+        body = await request.json()
+        symbol = body.get("symbol")
+        config = body.get("config", {})
+
+        logger.info(f"🚀 启动综合分析: {symbol}")
+        logger.info(f"📋 分析配置: {config}")
+        logger.info(f"📥 CLI原始请求体: {body}")
+
+        # 构造分析请求 - 转换为分析引擎期望的格式
+        selected_analysts = config.get("selected_analysts", ["market_analyst", "fundamentals_analyst"])
+
+        # 转换市场类型 - 使用分析引擎期望的中文值
+        market_type_map = {
+            "CN": "A股",
+            "US": "美股",
+            "HK": "港股"
+        }
+        market_type = market_type_map.get(config.get("market", "CN"), "A股")
+
+        # 转换LLM提供商 - 使用分析引擎期望的小写值
+        llm_provider_map = {
+            "dashscope": "dashscope",
+            "deepseek": "deepseek",
+            "openai": "openai",
+            "google": "gemini",
+            "anthropic": "anthropic"
+        }
+        llm_provider = llm_provider_map.get(config.get("llm_provider", "dashscope"), "dashscope")
+
+        # 转换分析日期为datetime格式
+        analysis_date = config.get("analysis_date")
+        if analysis_date and isinstance(analysis_date, str):
+            from datetime import datetime
+            try:
+                analysis_date = datetime.fromisoformat(analysis_date + "T00:00:00")
+            except:
+                analysis_date = datetime.now()
+        else:
+            analysis_date = datetime.now()
+
+        analysis_request = {
+            "stock_code": symbol,
+            "market_type": market_type,
+            "analysis_date": analysis_date.isoformat(),
+            "research_depth": config.get("max_debate_rounds", 3),
+
+            # 分析师选择
+            "market_analyst": "market_analyst" in selected_analysts,
+            "social_analyst": "social_analyst" in selected_analysts,
+            "news_analyst": "news_analyst" in selected_analysts,
+            "fundamental_analyst": "fundamentals_analyst" in selected_analysts,
+
+            # LLM配置
+            "llm_provider": llm_provider,
+            "model_version": config.get("llm_model", "qwen-plus-latest"),
+            "enable_memory": True,
+            "debug_mode": False,
+            "max_output_length": 4000,
+
+            # 高级选项
+            "include_sentiment": True,
+            "include_risk_assessment": True,
+            "custom_prompt": None
+        }
+
+        # 转发到分析引擎
+        logger.info(f"📤 发送到分析引擎的请求: {analysis_request}")
+        response = await analysis_engine_client.post(
+            "/api/analysis/start",
+            data=analysis_request
+        )
+        logger.info(f"📥 分析引擎响应: {response}")
+
+        return APIResponse(**response)
+
+    except httpx.HTTPError as e:
+        logger.error(f"❌ 分析引擎请求失败: {e}")
+        raise HTTPException(status_code=503, detail="分析引擎服务异常")
+    except Exception as e:
+        logger.error(f"❌ 启动综合分析失败: {e}")
+        raise HTTPException(status_code=500, detail=f"启动综合分析失败: {str(e)}")
 
 
 @app.get("/api/analysis/{analysis_id}/progress", response_model=APIResponse)
@@ -216,12 +314,12 @@ async def get_analysis_progress(analysis_id: str):
     try:
         if not analysis_engine_client:
             raise HTTPException(status_code=503, detail="分析引擎服务不可用")
-        
+
         # 转发到分析引擎
         response = await analysis_engine_client.get(f"/api/analysis/{analysis_id}/progress")
-        
+
         return APIResponse(**response)
-        
+
     except httpx.HTTPError as e:
         if e.response.status_code == 404:
             raise HTTPException(status_code=404, detail="分析任务不存在")
@@ -232,18 +330,62 @@ async def get_analysis_progress(analysis_id: str):
         raise HTTPException(status_code=500, detail=f"获取分析进度失败: {str(e)}")
 
 
+@app.get("/api/v1/analysis/status/{analysis_id}", response_model=APIResponse)
+async def get_analysis_status(analysis_id: str):
+    """获取分析状态 - CLI专用接口"""
+    try:
+        if not analysis_engine_client:
+            raise HTTPException(status_code=503, detail="分析引擎服务不可用")
+
+        # 转发到分析引擎
+        response = await analysis_engine_client.get(f"/api/analysis/{analysis_id}/progress")
+
+        return APIResponse(**response)
+
+    except httpx.HTTPError as e:
+        if e.response.status_code == 404:
+            raise HTTPException(status_code=404, detail="分析任务不存在")
+        logger.error(f"❌ 分析引擎请求失败: {e}")
+        raise HTTPException(status_code=503, detail="分析引擎服务异常")
+    except Exception as e:
+        logger.error(f"❌ 获取分析状态失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取分析状态失败: {str(e)}")
+
+
 @app.get("/api/analysis/{analysis_id}/result", response_model=APIResponse)
 async def get_analysis_result(analysis_id: str):
     """获取分析结果"""
     try:
         if not analysis_engine_client:
             raise HTTPException(status_code=503, detail="分析引擎服务不可用")
-        
+
         # 转发到分析引擎
         response = await analysis_engine_client.get(f"/api/analysis/{analysis_id}/result")
-        
+
         return APIResponse(**response)
-        
+
+    except httpx.HTTPError as e:
+        if e.response.status_code == 404:
+            raise HTTPException(status_code=404, detail="分析结果不存在")
+        logger.error(f"❌ 分析引擎请求失败: {e}")
+        raise HTTPException(status_code=503, detail="分析引擎服务异常")
+    except Exception as e:
+        logger.error(f"❌ 获取分析结果失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取分析结果失败: {str(e)}")
+
+
+@app.get("/api/v1/analysis/result/{analysis_id}", response_model=APIResponse)
+async def get_analysis_result_v1(analysis_id: str):
+    """获取分析结果 - CLI专用接口"""
+    try:
+        if not analysis_engine_client:
+            raise HTTPException(status_code=503, detail="分析引擎服务不可用")
+
+        # 转发到分析引擎
+        response = await analysis_engine_client.get(f"/api/analysis/{analysis_id}/result")
+
+        return APIResponse(**response)
+
     except httpx.HTTPError as e:
         if e.response.status_code == 404:
             raise HTTPException(status_code=404, detail="分析结果不存在")
@@ -294,9 +436,15 @@ async def get_stock_info(symbol: str, force_refresh: bool = False):
         return APIResponse(**response)
         
     except httpx.HTTPError as e:
-        if e.response.status_code == 404:
+        if hasattr(e, 'response') and e.response.status_code == 404:
             raise HTTPException(status_code=404, detail=f"未找到股票 {symbol} 的信息")
-        logger.error(f"❌ 数据服务请求失败: {e}")
+        # 判断是否为连接错误或超时错误
+        if isinstance(e, (httpx.ConnectError, httpx.TimeoutException)):
+            logger.critical(f"🚨 严重告警: Data Service不可达 - 无法获取股票信息")
+            logger.critical(f"🚨 请检查Data Service是否启动并可访问")
+            logger.critical(f"🚨 错误详情: {type(e).__name__}: {str(e)}")
+        else:
+            logger.error(f"❌ 数据服务请求失败: {e}")
         raise HTTPException(status_code=503, detail="数据服务异常")
     except Exception as e:
         logger.error(f"❌ 获取股票信息失败: {e}")
@@ -471,6 +619,182 @@ async def get_system_status():
 
 # ==================== LLM服务路由 ====================
 
+@app.get("/api/v1/llm/providers", response_model=APIResponse)
+async def get_llm_providers():
+    """获取LLM提供商列表"""
+    try:
+        # 返回支持的LLM提供商
+        providers = [
+            {
+                "id": "dashscope",
+                "name": "阿里百炼 | Alibaba DashScope",
+                "description": "阿里云通义千问系列模型",
+                "status": "available"
+            },
+            {
+                "id": "deepseek",
+                "name": "DeepSeek",
+                "description": "DeepSeek系列模型",
+                "status": "available"
+            },
+            {
+                "id": "openai",
+                "name": "OpenAI",
+                "description": "GPT系列模型",
+                "status": "available"
+            },
+            {
+                "id": "anthropic",
+                "name": "Anthropic",
+                "description": "Claude系列模型",
+                "status": "available"
+            },
+            {
+                "id": "google",
+                "name": "Google",
+                "description": "Gemini系列模型",
+                "status": "available"
+            }
+        ]
+
+        return APIResponse(
+            success=True,
+            message="获取LLM提供商成功",
+            data=providers
+        )
+
+    except Exception as e:
+        logger.error(f"❌ 获取LLM提供商失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取LLM提供商失败: {str(e)}")
+
+
+@app.get("/api/v1/llm/providers/{provider_id}/models", response_model=APIResponse)
+async def get_llm_models(provider_id: str):
+    """获取指定提供商的模型列表"""
+    try:
+        # 定义各提供商的模型列表
+        models_map = {
+            "dashscope": [
+                {
+                    "id": "qwen-plus-latest",
+                    "name": "通义千问Plus (最新版)",
+                    "description": "高性能通用模型，适合复杂分析任务",
+                    "context_length": 32768,
+                    "pricing": {"input": 0.004, "output": 0.012}
+                },
+                {
+                    "id": "qwen-turbo-latest",
+                    "name": "通义千问Turbo (最新版)",
+                    "description": "快速响应模型，适合实时分析",
+                    "context_length": 8192,
+                    "pricing": {"input": 0.002, "output": 0.006}
+                },
+                {
+                    "id": "qwen-max-latest",
+                    "name": "通义千问Max (最新版)",
+                    "description": "最强性能模型，适合深度分析",
+                    "context_length": 32768,
+                    "pricing": {"input": 0.02, "output": 0.06}
+                }
+            ],
+            "deepseek": [
+                {
+                    "id": "deepseek-chat",
+                    "name": "DeepSeek Chat",
+                    "description": "对话优化模型，适合交互式分析",
+                    "context_length": 32768,
+                    "pricing": {"input": 0.0014, "output": 0.0028}
+                },
+                {
+                    "id": "deepseek-coder",
+                    "name": "DeepSeek Coder",
+                    "description": "代码优化模型，适合技术分析",
+                    "context_length": 16384,
+                    "pricing": {"input": 0.0014, "output": 0.0028}
+                }
+            ],
+            "openai": [
+                {
+                    "id": "gpt-4o",
+                    "name": "GPT-4o",
+                    "description": "最新多模态模型，支持文本和图像",
+                    "context_length": 128000,
+                    "pricing": {"input": 0.005, "output": 0.015}
+                },
+                {
+                    "id": "gpt-4-turbo",
+                    "name": "GPT-4 Turbo",
+                    "description": "高性能模型，适合复杂推理",
+                    "context_length": 128000,
+                    "pricing": {"input": 0.01, "output": 0.03}
+                },
+                {
+                    "id": "gpt-3.5-turbo",
+                    "name": "GPT-3.5 Turbo",
+                    "description": "经济实用模型，适合基础分析",
+                    "context_length": 16385,
+                    "pricing": {"input": 0.0015, "output": 0.002}
+                }
+            ],
+            "anthropic": [
+                {
+                    "id": "claude-3-5-sonnet",
+                    "name": "Claude 3.5 Sonnet",
+                    "description": "最新版本，平衡性能和速度",
+                    "context_length": 200000,
+                    "pricing": {"input": 0.003, "output": 0.015}
+                },
+                {
+                    "id": "claude-3-opus",
+                    "name": "Claude 3 Opus",
+                    "description": "最强性能，适合复杂分析",
+                    "context_length": 200000,
+                    "pricing": {"input": 0.015, "output": 0.075}
+                },
+                {
+                    "id": "claude-3-haiku",
+                    "name": "Claude 3 Haiku",
+                    "description": "快速响应，适合简单任务",
+                    "context_length": 200000,
+                    "pricing": {"input": 0.00025, "output": 0.00125}
+                }
+            ],
+            "google": [
+                {
+                    "id": "gemini-1.5-pro",
+                    "name": "Gemini 1.5 Pro",
+                    "description": "高性能模型，支持长上下文",
+                    "context_length": 1000000,
+                    "pricing": {"input": 0.0035, "output": 0.0105}
+                },
+                {
+                    "id": "gemini-1.5-flash",
+                    "name": "Gemini 1.5 Flash",
+                    "description": "快速模型，适合实时分析",
+                    "context_length": 1000000,
+                    "pricing": {"input": 0.00035, "output": 0.00105}
+                }
+            ]
+        }
+
+        if provider_id not in models_map:
+            raise HTTPException(status_code=404, detail=f"未找到提供商: {provider_id}")
+
+        models = models_map[provider_id]
+
+        return APIResponse(
+            success=True,
+            message=f"获取{provider_id}模型列表成功",
+            data=models
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ 获取模型列表失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取模型列表失败: {str(e)}")
+
+
 @app.post("/api/v1/chat/completions")
 async def llm_chat_completions(request: Request):
     """LLM聊天完成接口"""
@@ -482,11 +806,17 @@ async def llm_chat_completions(request: Request):
         body = await request.body()
 
         # 转发请求到LLM服务
-        response = await llm_service_client.post("/api/v1/chat/completions", data=body, headers={"Content-Type": "application/json"})
+        response = await llm_service_client.post("/api/v1/chat/completions", raw_data=body, headers={"Content-Type": "application/json"})
         return response
 
     except Exception as e:
-        logger.error(f"❌ LLM服务请求失败: {e}")
+        # 判断是否为连接错误或超时错误
+        if "connection" in str(e).lower() or "timeout" in str(e).lower() or "failed" in str(e).lower():
+            logger.critical(f"🚨 严重告警: LLM Service不可达 - 无法处理对话请求")
+            logger.critical(f"🚨 请检查LLM Service是否启动并可访问")
+            logger.critical(f"🚨 错误详情: {type(e).__name__}: {str(e)}")
+        else:
+            logger.error(f"❌ LLM服务请求失败: {e}")
         raise HTTPException(status_code=500, detail=f"LLM服务请求失败: {str(e)}")
 
 

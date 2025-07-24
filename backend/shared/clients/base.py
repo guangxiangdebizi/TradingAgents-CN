@@ -24,33 +24,89 @@ class BaseServiceClient:
         # 创建HTTP客户端
         self.client = httpx.AsyncClient(
             base_url=self.base_url,
-            timeout=30.0,
+            timeout=300.0,  # 设置为300秒，适应LLM模型调用时间
             headers={
                 "Content-Type": "application/json",
                 "User-Agent": f"TradingAgents-Client/{service_name}"
             }
         )
     
-    async def get(self, endpoint: str, params: Optional[Dict] = None) -> Dict[str, Any]:
+    async def get(self, endpoint: str, params: Optional[Dict] = None, timeout: Optional[float] = None) -> Dict[str, Any]:
         """GET请求"""
         try:
             self.logger.debug(f"GET {endpoint} with params: {params}")
-            response = await self.client.get(endpoint, params=params)
+
+            # 如果指定了timeout，创建临时客户端
+            if timeout is not None:
+                async with httpx.AsyncClient(
+                    base_url=self.base_url,
+                    timeout=timeout,
+                    headers=self.client.headers
+                ) as temp_client:
+                    response = await temp_client.get(endpoint, params=params)
+            else:
+                response = await self.client.get(endpoint, params=params)
+
             response.raise_for_status()
             return response.json()
         except httpx.HTTPError as e:
-            self.logger.error(f"GET {endpoint} failed: {e}")
+            # 判断是否为连接错误或超时错误
+            if isinstance(e, (httpx.ConnectError, httpx.TimeoutException)):
+                self.logger.critical(f"🚨 严重告警: 目标服务不可达或超时 - {self.base_url}{endpoint}")
+                self.logger.critical(f"🚨 错误类型: {type(e).__name__}, 详情: {str(e)}")
+                self.logger.critical(f"🚨 请检查目标服务是否启动: {self.base_url}")
+            else:
+                self.logger.error(f"GET {endpoint} failed: {e}")
             raise
     
-    async def post(self, endpoint: str, data: Optional[Dict] = None) -> Dict[str, Any]:
+    async def post(self, endpoint: str, data: Optional[Dict] = None, headers: Optional[Dict] = None, timeout: Optional[float] = None, raw_data: Optional[bytes] = None) -> Dict[str, Any]:
         """POST请求"""
         try:
-            self.logger.debug(f"POST {endpoint} with data: {data}")
-            response = await self.client.post(endpoint, json=data)
+            self.logger.info(f"🔍 BaseClient POST请求: {self.base_url}{endpoint}")
+            self.logger.info(f"🔍 BaseClient base_url: {self.base_url}")
+            self.logger.info(f"🔍 BaseClient endpoint: {endpoint}")
+            self.logger.info(f"🔍 BaseClient 请求数据: {data if data else 'raw_data'}")
+            self.logger.debug(f"POST {endpoint} with data: {data if data else 'raw_data'}")
+
+            # 如果指定了自定义headers或timeout，创建临时客户端
+            if headers is not None or timeout is not None:
+                # 合并headers
+                merged_headers = dict(self.client.headers)
+                if headers:
+                    merged_headers.update(headers)
+
+                # 使用指定的timeout或默认timeout
+                client_timeout = timeout if timeout is not None else 300.0  # 设置为300秒，适应LLM模型调用时间
+
+                async with httpx.AsyncClient(
+                    base_url=self.base_url,
+                    timeout=client_timeout,
+                    headers=merged_headers
+                ) as temp_client:
+                    if raw_data is not None:
+                        response = await temp_client.post(endpoint, content=raw_data)
+                    else:
+                        response = await temp_client.post(endpoint, json=data)
+            else:
+                if raw_data is not None:
+                    response = await self.client.post(endpoint, content=raw_data)
+                else:
+                    response = await self.client.post(endpoint, json=data)
+
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            self.logger.info(f"🔍 BaseClient POST响应: status={response.status_code}, content_length={len(response.content)}")
+            self.logger.info(f"🔍 BaseClient POST响应内容: {str(result)[:300]}...")
+            return result
         except httpx.HTTPError as e:
-            self.logger.error(f"POST {endpoint} failed: {e}")
+            # 判断是否为连接错误或超时错误
+            if isinstance(e, (httpx.ConnectError, httpx.TimeoutException)):
+                self.logger.critical(f"🚨 严重告警: 目标服务不可达或超时 - {self.base_url}{endpoint}")
+                self.logger.critical(f"🚨 错误类型: {type(e).__name__}, 详情: {str(e)}")
+                self.logger.critical(f"🚨 请检查目标服务是否启动: {self.base_url}")
+            else:
+                self.logger.error(f"🔍 BaseClient POST {self.base_url}{endpoint} failed: {e}")
+                self.logger.error(f"🔍 BaseClient 错误详情: {type(e).__name__}: {str(e)}")
             raise
     
     async def put(self, endpoint: str, data: Optional[Dict] = None) -> Dict[str, Any]:

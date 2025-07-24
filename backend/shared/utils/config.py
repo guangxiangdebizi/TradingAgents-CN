@@ -99,12 +99,28 @@ class Config:
     
     def get_service_url(self, service_name: str) -> str:
         """获取服务URL"""
-        host_key = f"{service_name.upper()}_HOST"
-        port_key = f"{service_name.upper()}_PORT"
-        
+        # 标准化服务名称：将连字符转换为下划线
+        normalized_service_name = service_name.replace('-', '_').upper()
+
+        host_key = f"{normalized_service_name}_HOST"
+        port_key = f"{normalized_service_name}_PORT"
+
         host = self.get(host_key, 'localhost')
-        port = self.get(port_key, 8000)
-        
+
+        # 为不同服务设置正确的默认端口
+        default_ports = {
+            'API_GATEWAY': 8000,
+            'ANALYSIS_ENGINE': 8001,
+            'DATA_SERVICE': 8002,
+            'TASK_SCHEDULER': 8003,
+            'LLM_SERVICE': 8004,
+            'AGENT_SERVICE': 8008,  # 修复：Agent Service实际端口是8008
+            'MEMORY_SERVICE': 8006,
+        }
+
+        default_port = default_ports.get(normalized_service_name, 8000)
+        port = self.get(port_key, default_port)
+
         return f"http://{host}:{port}"
     
     def get_database_config(self) -> Dict[str, str]:

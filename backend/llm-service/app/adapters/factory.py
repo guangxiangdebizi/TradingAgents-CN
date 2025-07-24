@@ -8,6 +8,9 @@ import logging
 from typing import Dict, Any, Optional
 from .base import BaseLLMAdapter
 from .deepseek_adapter import DeepSeekAdapter
+from .dashscope_adapter import DashScopeAdapter
+from .google_adapter import GoogleAdapter
+from .openai_adapter import OpenAIAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -17,10 +20,9 @@ class AdapterFactory:
     def __init__(self):
         self.adapter_classes = {
             "deepseek": DeepSeekAdapter,
-            # 后续添加更多适配器
-            # "openai": OpenAIAdapter,
-            # "dashscope": DashScopeAdapter,
-            # "gemini": GeminiAdapter,
+            "dashscope": DashScopeAdapter,
+            "google": GoogleAdapter,
+            "openai": OpenAIAdapter,
         }
     
     async def create_adapter(self, provider: str, config: Dict[str, Any]) -> Optional[BaseLLMAdapter]:
@@ -77,34 +79,62 @@ class AdapterFactory:
                 "enabled": True
             }
             
-            configs["deepseek-coder"] = {
-                "provider_name": "deepseek",
-                "model_name": "deepseek-coder",
-                "api_key": deepseek_api_key,
-                "base_url": os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+
+        
+        # OpenAI配置
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if openai_api_key:
+            configs["gpt-4"] = {
+                "provider_name": "openai",
+                "model_name": "gpt-4",
+                "api_key": openai_api_key,
+                "base_url": os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
                 "enabled": True
             }
-        
-        # TODO: 添加其他模型配置
-        # OpenAI配置
-        # openai_api_key = os.getenv("OPENAI_API_KEY")
-        # if openai_api_key:
-        #     configs["gpt-4"] = {
-        #         "provider_name": "openai",
-        #         "model_name": "gpt-4",
-        #         "api_key": openai_api_key,
-        #         "enabled": True
-        #     }
-        
+
+            configs["gpt-3.5-turbo"] = {
+                "provider_name": "openai",
+                "model_name": "gpt-3.5-turbo",
+                "api_key": openai_api_key,
+                "base_url": os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+                "enabled": True
+            }
+
         # DashScope配置
-        # dashscope_api_key = os.getenv("DASHSCOPE_API_KEY")
-        # if dashscope_api_key:
-        #     configs["qwen-plus"] = {
-        #         "provider_name": "dashscope",
-        #         "model_name": "qwen-plus",
-        #         "api_key": dashscope_api_key,
-        #         "enabled": True
-        #     }
+        dashscope_api_key = os.getenv("DASHSCOPE_API_KEY")
+        if dashscope_api_key:
+            configs["qwen-plus"] = {
+                "provider_name": "dashscope",
+                "model_name": "qwen-plus",
+                "api_key": dashscope_api_key,
+                "enabled": True
+            }
+
+            configs["qwen-turbo"] = {
+                "provider_name": "dashscope",
+                "model_name": "qwen-turbo",
+                "api_key": dashscope_api_key,
+                "enabled": True
+            }
+
+
+
+        # Google配置
+        google_api_key = os.getenv("GOOGLE_API_KEY")
+        if google_api_key:
+            configs["gemini-pro"] = {
+                "provider_name": "google",
+                "model_name": "gemini-pro",
+                "api_key": google_api_key,
+                "enabled": True
+            }
+
+            configs["gemini-1.5-flash"] = {
+                "provider_name": "google",
+                "model_name": "gemini-1.5-flash",
+                "api_key": google_api_key,
+                "enabled": True
+            }
         
         return configs
 

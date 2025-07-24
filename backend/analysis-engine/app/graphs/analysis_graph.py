@@ -108,6 +108,9 @@ class AnalysisGraph:
         if parameters:
             default_params.update(parameters)
         
+        # 导入LangChain消息类型
+        from langchain_core.messages import HumanMessage
+
         state: GraphState = {
             "symbol": symbol,
             "company_name": symbol,  # 将在数据获取阶段更新
@@ -126,7 +129,7 @@ class AnalysisGraph:
             "risk_assessment": None,
             "final_recommendation": None,
             "investment_plan": None,
-            "messages": [],
+            "messages": [HumanMessage(content=f"开始分析股票 {symbol}")],  # 使用LangChain消息对象
             "errors": [],
             "metadata": default_params,
             "current_step": "initialization",

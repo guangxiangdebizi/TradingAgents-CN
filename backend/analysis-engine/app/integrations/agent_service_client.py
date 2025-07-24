@@ -19,7 +19,7 @@ logger = get_service_logger("analysis-engine.agent_client")
 @dataclass
 class AgentServiceConfig:
     """Agent Service配置"""
-    base_url: str = "http://localhost:8002"
+    base_url: str = "http://localhost:8008"  # 修复：Agent Service实际端口是8008
     timeout: int = 300
     max_retries: int = 3
     retry_delay: int = 5
@@ -241,8 +241,13 @@ class AgentServiceClient:
             if not self.session:
                 await self.connect()
             
+            # 生成辩论ID
+            import uuid
+            debate_id = str(uuid.uuid4())
+
             # 准备辩论请求
             payload = {
+                "debate_id": debate_id,  # 添加必需的debate_id字段
                 "topic": topic or f"{stock_code} 投资决策辩论",
                 "participants": participants or ["bull_researcher", "bear_researcher", "neutral_debator"],
                 "context": {
@@ -250,7 +255,9 @@ class AgentServiceClient:
                     "company_name": company_name,
                     "analysis_date": datetime.now().strftime("%Y-%m-%d"),
                     "source": "analysis_engine"
-                }
+                },
+                "max_rounds": 1,  # 快速分析只进行1轮
+                "timeout_per_round": 120
             }
             
             async with self.session.post(
@@ -343,7 +350,7 @@ async def get_agent_service_client() -> AgentServiceClient:
         # 从配置获取Agent Service地址
         config = get_service_config("analysis_engine")
         agent_service_config = AgentServiceConfig(
-            base_url=config.get("agent_service_url", "http://localhost:8002"),
+            base_url=config.get("agent_service_url", "http://localhost:8008"),  # 修复：Agent Service实际端口是8008
             timeout=config.get("agent_service_timeout", 300)
         )
         

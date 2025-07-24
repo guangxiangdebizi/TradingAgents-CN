@@ -43,18 +43,30 @@ class LLMClient(BaseServiceClient):
                 "temperature": temperature,
                 **kwargs
             }
-            
+
             if max_tokens:
                 data["max_tokens"] = max_tokens
-            
-            self.logger.debug(f"Chat completion request: model={model}, messages_count={len(messages)}")
+
+            self.logger.info(f"🔍 LLM客户端请求: model={model}, messages_count={len(messages)}")
+            self.logger.info(f"🔍 LLM客户端消息: {[{'role': msg['role'], 'content': msg['content'][:200] + '...' if len(msg['content']) > 200 else msg['content']} for msg in messages]}")
+            self.logger.info(f"🔍 LLM客户端请求数据: {data}")
+            self.logger.info(f"🔍 LLM客户端请求URL: {self.base_url}/api/v1/chat/completions")
+            self.logger.info(f"🔍 LLM客户端base_url: {self.base_url}")
+            self.logger.info(f"🔍 LLM客户端完整请求路径: /api/v1/chat/completions")
+
             response = await self.post("/api/v1/chat/completions", data)
-            
-            self.logger.debug(f"Chat completion response: {response.get('success', False)}")
+
+            self.logger.info(f"🔍 LLM客户端响应: {response}")
             return response
             
         except Exception as e:
-            self.logger.error(f"Chat completion failed: {e}")
+            # 判断是否为连接错误或超时错误
+            if "connection" in str(e).lower() or "timeout" in str(e).lower() or "failed" in str(e).lower():
+                self.logger.critical(f"🚨 严重告警: LLM Service不可达 - 无法完成对话")
+                self.logger.critical(f"🚨 请检查LLM Service是否启动: {self.base_url}")
+                self.logger.critical(f"🚨 错误详情: {type(e).__name__}: {str(e)}")
+            else:
+                self.logger.error(f"Chat completion failed: {e}")
             raise
     
     async def analyze_text(

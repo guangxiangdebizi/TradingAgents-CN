@@ -27,8 +27,8 @@ class ResearchManager(BaseAgent):
         """定义智能体能力"""
         return [
             AgentCapability(
-                name="research_coordination",
-                description="研究协调 - 整合和协调各分析师的研究结果",
+                name="research_management",
+                description="研究管理 - 整合和协调各分析师的研究结果",
                 required_tools=["aggregate_analysis", "quality_control"],
                 supported_markets=["US", "CN", "HK"],
                 max_concurrent_tasks=1,

@@ -10,9 +10,10 @@ from contextlib import asynccontextmanager
 from typing import Dict, Any, List, Optional
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent.parent.parent.parent
@@ -28,10 +29,10 @@ import redis.asyncio as redis
 # 导入核心组件
 from .agents.agent_manager import AgentManager
 from .utils.state_manager import StateManager
-# 暂时注释掉其他复杂组件，先启用基础功能
-# from .orchestration.collaboration_engine import CollaborationEngine
-# from .orchestration.debate_engine import DebateEngine
-# from .orchestration.consensus_algorithm import ConsensusAlgorithm
+# 启用高级组件，包括多轮辩论功能
+from .orchestration.collaboration_engine import CollaborationEngine
+from .orchestration.debate_engine import DebateEngine
+from .orchestration.consensus_algorithm import ConsensusAlgorithm
 # from .models.agent_models import AgentRequest, AgentResponse, DebateRequest, DebateResponse
 # from .models.task_models import TaskRequest, TaskResponse, TaskStatus
 # from .utils.state_manager import StateManager
@@ -179,6 +180,24 @@ app = FastAPI(
     version="0.1.7",
     lifespan=lifespan
 )
+
+# 添加验证错误处理器
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """处理请求验证错误，提供详细的错误信息"""
+    logger.error(f"❌ Agent Service请求验证失败: {request.method} {request.url}")
+    logger.error(f"📋 请求体: {await request.body()}")
+    logger.error(f"🔍 验证错误详情: {exc.errors()}")
+
+    return JSONResponse(
+        status_code=422,
+        content={
+            "success": False,
+            "message": "请求数据验证失败",
+            "errors": exc.errors(),
+            "detail": str(exc)
+        }
+    )
 
 # 添加CORS中间件
 app.add_middleware(

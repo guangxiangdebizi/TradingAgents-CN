@@ -75,8 +75,62 @@ python tests/unit/api/test_api_interactive.py
 - [⚙️ 设置工具](tools/setup/)
 - [🐛 调试工具](tools/debugging/)
 
+## 🏗️ **架构设计**
+
+### **混合架构：微服务 + 图引擎**
+Backend采用创新的混合架构，结合微服务的可扩展性和LangGraph的复杂流程管理能力：
+
+```
+Backend混合架构
+├── API Gateway (8001)      # 统一入口，路由分发
+├── Analysis Engine (8002)  # 分析引擎 + 图引擎
+│   ├── TradingGraph        # 主图引擎，管理分析流程
+│   ├── ConditionalLogic    # 条件逻辑，处理复杂分支
+│   ├── GraphState          # 图状态，管理分析状态
+│   └── AgentNodes          # Agent节点，连接微服务
+├── Data Service (8003)     # 数据服务，统一数据接口
+├── LLM Service (8004)      # LLM服务，模型调用管理
+├── Agent Service (8005)    # Agent服务，智能体管理
+└── Memory Service (8006)   # 内存服务，状态和缓存管理
+```
+
+### **为什么需要图引擎？**
+
+Backend使用LangGraph图引擎来实现与TradingAgents完全一致的核心功能：
+
+#### **1. 多轮投资辩论**
+```
+多头研究员 ⇄ 空头研究员 (多轮辩论)
+    ↓
+研究经理 (综合观点)
+    ↓
+最终投资建议
+```
+
+#### **2. 三方风险分析**
+```
+激进分析师 → 保守分析师 → 中性分析师 (轮流分析)
+    ↓
+风险经理 (综合评估)
+    ↓
+最终风险评估
+```
+
+#### **3. 条件性工具调用**
+```
+分析师 → 检查需要工具 → 调用工具 → 再次检查 → 继续或结束
+```
+
+### **架构优势**
+- ✅ **功能完整**：实现TradingAgents的所有核心功能
+- ✅ **高可扩展**：微服务架构支持独立扩展
+- ✅ **高性能**：并发处理 + 原生Function Calling
+- ✅ **高可靠**：服务隔离，故障不传播
+
 ## 🌟 主要特性
 
+- ✅ **多轮辩论** - 多头vs空头投资辩论，三方风险分析
+- ✅ **图引擎** - LangGraph驱动的复杂分析流程
 - ✅ **多数据源支持** - Alpha Vantage, Twelve Data, FinnHub等
 - ✅ **智能优先级** - 自动降级和故障转移
 - ✅ **缓存机制** - Redis和MongoDB双重缓存

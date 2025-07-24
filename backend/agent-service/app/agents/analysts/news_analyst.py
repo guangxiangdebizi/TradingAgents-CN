@@ -29,8 +29,8 @@ class NewsAnalyst(BaseAgent):
         """定义智能体能力"""
         return [
             AgentCapability(
-                name="news_sentiment_analysis",
-                description="新闻情感分析 - 分析新闻对股价的情感影响",
+                name="news_analysis",
+                description="新闻分析 - 分析新闻对股价的情感影响",
                 required_tools=["get_news_data", "sentiment_analysis"],
                 supported_markets=["US", "CN", "HK"],
                 max_concurrent_tasks=3,

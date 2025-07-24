@@ -25,6 +25,10 @@ import uvicorn
 from .concurrency.concurrency_manager import get_concurrency_manager, TaskPriority, ConcurrencyManager
 from .concurrency.load_balancer import get_load_balancer, LoadBalancer, LoadBalanceStrategy
 
+# 导入工作流管理模块
+from .core.workflow_scheduler import WorkflowScheduler, TaskPriority as WorkflowTaskPriority
+from .core.execution_monitor import ExecutionMonitor
+
 # 导入分析模块
 from .analysis.graph_analyzer import GraphAnalyzer
 from .models.requests import AnalysisRequest, AnalysisParameters
@@ -39,11 +43,13 @@ logger = logging.getLogger(__name__)
 graph_analyzer: Optional[GraphAnalyzer] = None
 concurrency_manager: Optional[ConcurrencyManager] = None
 load_balancer: Optional[LoadBalancer] = None
+workflow_scheduler: Optional[WorkflowScheduler] = None
+execution_monitor: Optional[ExecutionMonitor] = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
-    global graph_analyzer, concurrency_manager, load_balancer
+    global graph_analyzer, concurrency_manager, load_balancer, workflow_scheduler, execution_monitor
     
     # 启动时初始化
     logger.info("🚀 Enhanced Analysis Engine 启动中...")
@@ -74,8 +80,25 @@ async def lifespan(app: FastAPI):
         
         # 设置任务处理器
         concurrency_manager.set_task_processor(process_analysis_task)
-        
+
         logger.info("✅ 图分析器初始化完成")
+
+        # 初始化工作流调度器
+        max_concurrent_workflows = ANALYSIS_ENGINE_CONFIG.get("max_concurrent_workflows", 3)
+        workflow_scheduler = WorkflowScheduler(max_concurrent_workflows)
+
+        # 注册任务执行器
+        workflow_scheduler.register_executor("analysis", execute_analysis_workflow)
+        workflow_scheduler.register_executor("debate", execute_debate_workflow)
+        workflow_scheduler.register_executor("risk_assessment", execute_risk_assessment_workflow)
+
+        await workflow_scheduler.start()
+        logger.info("✅ 工作流调度器初始化完成")
+
+        # 初始化执行监控器
+        execution_monitor = ExecutionMonitor(workflow_scheduler)
+        await execution_monitor.start()
+        logger.info("✅ 执行监控器初始化完成")
         
         logger.info("🎉 Enhanced Analysis Engine 启动完成")
         
@@ -96,7 +119,13 @@ async def lifespan(app: FastAPI):
         
         if graph_analyzer:
             await graph_analyzer.cleanup()
-        
+
+        if execution_monitor:
+            await execution_monitor.stop()
+
+        if workflow_scheduler:
+            await workflow_scheduler.stop()
+
         logger.info("✅ Enhanced Analysis Engine 已关闭")
 
 # 创建FastAPI应用
@@ -115,6 +144,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 导入并注册API路由
+from .api.workflow_api import router as workflow_router
+app.include_router(workflow_router)
 
 # 依赖注入
 async def get_concurrency_mgr() -> ConcurrencyManager:
@@ -372,6 +405,70 @@ async def _estimate_wait_time(mgr: ConcurrencyManager) -> float:
     estimated_time = (queue_size / available_slots) * max(avg_execution_time, 30)
     
     return estimated_time
+
+# 工作流执行器函数
+async def execute_analysis_workflow(task):
+    """执行分析工作流"""
+    try:
+        logger.info(f"🔍 执行分析工作流: {task.symbol}")
+
+        # 使用图分析器执行完整分析
+        if graph_analyzer:
+            result = await graph_analyzer.analyze_stock(
+                symbol=task.symbol,
+                analysis_date=datetime.now().strftime("%Y-%m-%d"),
+                **task.metadata
+            )
+            return result
+        else:
+            raise Exception("图分析器未初始化")
+
+    except Exception as e:
+        logger.error(f"❌ 分析工作流执行失败: {e}")
+        raise
+
+async def execute_debate_workflow(task):
+    """执行辩论工作流"""
+    try:
+        logger.info(f"🎭 执行辩论工作流: {task.symbol}")
+
+        # 这里可以实现专门的辩论流程
+        # 目前使用图分析器的辩论功能
+        if graph_analyzer:
+            result = await graph_analyzer.analyze_stock(
+                symbol=task.symbol,
+                analysis_date=datetime.now().strftime("%Y-%m-%d"),
+                focus="debate",
+                **task.metadata
+            )
+            return result
+        else:
+            raise Exception("图分析器未初始化")
+
+    except Exception as e:
+        logger.error(f"❌ 辩论工作流执行失败: {e}")
+        raise
+
+async def execute_risk_assessment_workflow(task):
+    """执行风险评估工作流"""
+    try:
+        logger.info(f"⚠️ 执行风险评估工作流: {task.symbol}")
+
+        # 这里可以实现专门的风险评估流程
+        if graph_analyzer:
+            result = await graph_analyzer.analyze_stock(
+                symbol=task.symbol,
+                analysis_date=datetime.now().strftime("%Y-%m-%d"),
+                focus="risk_assessment",
+                **task.metadata
+            )
+            return result
+        else:
+            raise Exception("图分析器未初始化")
+
+    except Exception as e:
+        logger.error(f"❌ 风险评估工作流执行失败: {e}")
+        raise
 
 if __name__ == "__main__":
     # 获取配置

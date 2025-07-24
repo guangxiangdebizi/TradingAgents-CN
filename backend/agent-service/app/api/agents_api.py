@@ -178,6 +178,10 @@ async def execute_task(
 ):
     """执行智能体任务"""
     try:
+        # 添加调试日志
+        logger.info(f"🔍 收到Agent Service请求: agent_type={request.agent_type}, task_type={request.task_type}")
+        logger.info(f"🔍 请求详情: symbol={request.symbol}, market={request.market}")
+
         # 创建任务上下文
         context = TaskContext(
             task_id=f"task_{request.symbol}_{request.analysis_date}_{hash(str(request.parameters))}",

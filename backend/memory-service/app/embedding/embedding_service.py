@@ -85,7 +85,7 @@ class EmbeddingService:
         if deepseek_key:
             try:
                 from openai import AsyncOpenAI
-                
+
                 self.providers["deepseek"] = {
                     "client": AsyncOpenAI(
                         api_key=deepseek_key,
@@ -98,6 +98,24 @@ class EmbeddingService:
             except ImportError:
                 logger.warning("⚠️ DeepSeek配置失败")
                 self.providers["deepseek"] = {"available": False}
+
+        # Ollama (本地)
+        ollama_host = os.getenv('OLLAMA_HOST', 'localhost')
+        ollama_port = os.getenv('OLLAMA_PORT', '11434')
+        ollama_model = os.getenv('OLLAMA_EMBEDDING_MODEL', 'nomic-embed-text')
+
+        try:
+            # 测试Ollama连接
+            ollama_url = f"http://{ollama_host}:{ollama_port}"
+            self.providers["ollama"] = {
+                "base_url": ollama_url,
+                "model": ollama_model,
+                "available": True
+            }
+            logger.info(f"✅ Ollama Embedding已配置: {ollama_url}")
+        except Exception as e:
+            logger.warning(f"⚠️ Ollama配置失败: {e}")
+            self.providers["ollama"] = {"available": False}
         
         # 本地Ollama
         try:
@@ -204,17 +222,25 @@ class EmbeddingService:
     async def _generate_ollama_embedding(self, text: str, model: Optional[str] = None) -> List[float]:
         """生成Ollama Embedding"""
         provider_info = self.providers["ollama"]
-        client = provider_info["client"]
-        
+        base_url = provider_info["base_url"]
+
         if not model:
             model = provider_info["model"]
-        
-        response = await client.embeddings.create(
-            model=model,
-            input=text
-        )
-        
-        return response.data[0].embedding
+
+        # 构建Ollama API请求
+        url = f"{base_url}/api/embeddings"
+        payload = {
+            "model": model,
+            "prompt": text
+        }
+
+        async with self.session.post(url, json=payload) as response:
+            if response.status == 200:
+                result = await response.json()
+                return result.get("embedding", [])
+            else:
+                error_text = await response.text()
+                raise Exception(f"Ollama API错误 {response.status}: {error_text}")
     
     async def get_available_providers(self) -> Dict[str, Any]:
         """获取可用的提供商列表"""

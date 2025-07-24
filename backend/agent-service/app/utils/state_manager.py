@@ -370,44 +370,63 @@ class StateManager:
             except Exception as e:
                 logger.error(f"❌ 状态同步循环错误: {e}")
     
+    def _serialize_for_db(self, data: Any) -> Any:
+        """序列化数据以便存储到数据库"""
+        from enum import Enum
+        from datetime import datetime
+
+        if isinstance(data, Enum):
+            return data.value
+        elif isinstance(data, datetime):
+            return data.isoformat()
+        elif isinstance(data, dict):
+            return {key: self._serialize_for_db(value) for key, value in data.items()}
+        elif isinstance(data, list):
+            return [self._serialize_for_db(item) for item in data]
+        else:
+            return data
+
     async def _sync_states_to_db(self):
         """同步状态到数据库"""
         try:
             if not self.db_manager.is_connected():
                 return
-            
+
             # 同步智能体状态
             if self.agent_states:
                 collection = self.db_manager.get_collection("agent_states")
                 for agent_id, state in self.agent_states.items():
+                    serialized_state = self._serialize_for_db(state)
                     await collection.replace_one(
                         {"agent_id": agent_id},
-                        state,
+                        serialized_state,
                         upsert=True
                     )
-            
+
             # 同步任务状态
             if self.task_states:
                 collection = self.db_manager.get_collection("task_states")
                 for task_id, state in self.task_states.items():
+                    serialized_state = self._serialize_for_db(state)
                     await collection.replace_one(
                         {"task_id": task_id},
-                        state,
+                        serialized_state,
                         upsert=True
                     )
-            
+
             # 同步工作流状态
             if self.workflow_states:
                 collection = self.db_manager.get_collection("workflow_states")
                 for workflow_id, state in self.workflow_states.items():
+                    serialized_state = self._serialize_for_db(state)
                     await collection.replace_one(
                         {"workflow_id": workflow_id},
-                        state,
+                        serialized_state,
                         upsert=True
                     )
-            
+
             logger.debug("💾 状态同步到数据库完成")
-            
+
         except Exception as e:
             logger.error(f"❌ 状态同步到数据库失败: {e}")
     

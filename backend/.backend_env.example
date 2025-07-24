@@ -66,6 +66,16 @@ ALPHA_VANTAGE_API_KEY=your_alpha_vantage_api_key_here
 # Twelve Data 数据源 (可选)
 TWELVE_DATA_API_KEY=your_twelve_data_api_key_here
 
+# 🤖 Embedding服务配置
+# 默认Embedding提供商 (dashscope/openai/deepseek/ollama)
+DEFAULT_EMBEDDING_PROVIDER=dashscope
+DEFAULT_EMBEDDING_MODEL=text-embedding-v3
+
+# Ollama本地服务配置 (可选)
+OLLAMA_HOST=localhost
+OLLAMA_PORT=11434
+OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+
 # 🛠️ 系统配置
 # 环境设置
 ENVIRONMENT=development

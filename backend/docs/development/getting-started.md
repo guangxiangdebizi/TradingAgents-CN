@@ -49,15 +49,15 @@ cd TradingAgents-CN
 cd backend
 
 # 复制环境变量配置
-cp .env.example .env
+cp .backend_env.example .backend_env
 
 # 编辑配置文件，填入您的API密钥
-vim .env  # 或使用其他编辑器
+vim .backend_env  # 或使用其他编辑器
 ```
 
 #### 2. 配置 API 密钥
 
-编辑 `.env` 文件，填入必要的API密钥：
+编辑 `.backend_env` 文件，填入必要的API密钥：
 
 ```bash
 # 必填项

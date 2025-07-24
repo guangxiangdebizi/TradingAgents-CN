@@ -236,10 +236,10 @@ class EnhancedAnalyzer:
                 await progress_callback(10, "启动独立分析", "使用传统分析方法")
             
             # 使用原有的独立分析器
+            trade_date = request.analysis_date.strftime("%Y-%m-%d") if request.analysis_date else None
             result = await self.independent_analyzer.analyze_stock(
                 request.stock_code,
-                request.market_type.value,
-                progress_callback
+                trade_date
             )
             
             return result

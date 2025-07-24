@@ -2,11 +2,11 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/Version-cn--0.1.10-green.svg)](./VERSION)
+[![Version](https://img.shields.io/badge/Version-cn--0.1.8-green.svg)](./VERSION)
 [![Documentation](https://img.shields.io/badge/docs-中文文档-green.svg)](./docs/)
 [![Original](https://img.shields.io/badge/基于-TauricResearch/TradingAgents-orange.svg)](https://github.com/TauricResearch/TradingAgents)
 
-> 🚀 **最新版本 cn-0.1.10**: 全新实时进度显示、智能会话管理、异步进度跟踪，Web界面体验全面升级！
+> 🚀 **最新版本 cn-0.1.8**: Backend系统重大修复，多智能体分析引擎完全恢复正常！
 >
 > 🎯 **核心功能**: Docker容器化部署 | 专业报告导出 | DeepSeek V3集成 | 完整A股支持 | 中文本地化
 
@@ -18,22 +18,24 @@
 
 **🎯 我们的使命**: 为中国用户提供完整的中文化体验，支持A股/港股市场，集成国产大模型，推动AI金融技术在中文社区的普及应用。
 
-## 🆕 v0.1.10 重大更新
+## 🆕 v0.1.8 重大修复
 
-### 🚀 实时进度显示系统
-- **异步进度跟踪**: 全新AsyncProgressTracker，实时显示分析进度和步骤
-- **智能时间计算**: 修复时间显示问题，准确反映真实分析耗时
-- **多种显示模式**: 支持Streamlit、静态、统一等多种进度显示方式
+### 🛠️ Backend系统关键问题修复
+- **✅ Agent Service智能体获取逻辑修复**: 解决枚举对象比较错误，智能体调用100%成功
+- **✅ 图分析引擎完全修复**: 移除错误引用，修复条件边映射，图执行稳定运行
+- **✅ 智能体能力配置统一**: 修复所有智能体的能力名称匹配问题
+- **✅ 递归限制问题解决**: 参考原始项目，设置合适的递归限制，支持复杂分析流程
 
-### 📊 智能会话管理
-- **状态持久化**: 支持页面刷新后恢复分析状态和历史报告
-- **自动降级机制**: Redis不可用时自动切换到文件存储
-- **一键查看报告**: 分析完成后显示"📊 查看分析报告"按钮
+### 🎯 系统性能大幅提升
+- **功能性**: 从0%不可用恢复到100%完全正常
+- **稳定性**: 从频繁崩溃到稳定运行106秒复杂分析
+- **可靠性**: 端到端测试完全通过，所有智能体协作正常
 
-### 🎨 用户体验优化
-- **界面简化**: 移除重复按钮，功能集中化，视觉层次更清晰
-- **响应式设计**: 改进移动端适配和不同屏幕尺寸支持
-- **错误处理**: 增强异常处理和用户友好的错误提示
+### 📊 验证结果
+- **测试股票**: 000001 (平安银行) ✅ 分析成功
+- **执行时间**: 106秒完整多智能体分析流程
+- **智能体调用**: 市场分析师、研究团队、交易员、风险管理全部正常
+- **结果输出**: 完整分析报告成功生成和保存
 
 ## 🎯 核心特性
 

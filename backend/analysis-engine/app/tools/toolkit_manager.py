@@ -12,6 +12,8 @@ from datetime import datetime
 from .data_tools import DataTools
 from .analysis_tools import AnalysisTools
 from .news_tools import NewsTools
+from .unified_tools import UnifiedTools
+from .tool_logging import log_async_tool_call, log_tool_usage, log_analysis_start, log_analysis_complete
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,7 @@ class ToolkitManager:
         self.data_tools: Optional[DataTools] = None
         self.analysis_tools: Optional[AnalysisTools] = None
         self.news_tools: Optional[NewsTools] = None
+        self.unified_tools: Optional[UnifiedTools] = None
         self.initialized = False
     
     async def initialize(self):
@@ -48,7 +51,11 @@ class ToolkitManager:
             
             self.news_tools = NewsTools()
             await self.news_tools.initialize()
-            
+
+            # 初始化统一工具
+            self.unified_tools = UnifiedTools()
+            await self.unified_tools.initialize()
+
             # 注册所有工具
             await self._register_tools()
             
@@ -131,6 +138,34 @@ class ToolkitManager:
                 {"text": "str", "source": "str"},
                 self.news_tools.analyze_sentiment
             )
+
+        # 注册统一工具
+        if self.unified_tools:
+            self._register_tool(
+                "get_stock_market_data_unified",
+                "统一的股票市场数据工具，自动识别股票类型并获取价格和技术指标",
+                "unified",
+                {"ticker": "str", "start_date": "str", "end_date": "str"},
+                self.unified_tools.get_stock_market_data_unified
+            )
+
+            self._register_tool(
+                "get_stock_fundamentals_unified",
+                "统一的股票基本面数据工具，获取财务数据和公司信息",
+                "unified",
+                {"ticker": "str", "start_date": "str", "end_date": "str"},
+                self.unified_tools.get_stock_fundamentals_unified
+            )
+
+            self._register_tool(
+                "get_stock_news_unified",
+                "统一的股票新闻工具，获取相关新闻和情感分析",
+                "unified",
+                {"ticker": "str", "days": "int"},
+                self.unified_tools.get_stock_news_unified
+            )
+
+        logger.info(f"✅ 工具注册完成，共注册 {len(self.tools)} 个工具")
     
     def _register_tool(self, name: str, description: str, category: str, 
                       parameters: Dict[str, Any], function: Callable):

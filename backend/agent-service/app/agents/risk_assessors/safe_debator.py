@@ -27,8 +27,8 @@ class SafeDebator(BaseAgent):
         """定义智能体能力"""
         return [
             AgentCapability(
-                name="safe_debate",
-                description="保守辩论 - 在风险评估中提出保守观点",
+                name="risk_assessment",
+                description="风险评估 - 保守辩论，在风险评估中提出保守观点",
                 required_tools=["debate_analysis", "risk_modeling"],
                 supported_markets=["US", "CN", "HK"],
                 max_concurrent_tasks=2,

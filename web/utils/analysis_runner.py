@@ -154,7 +154,14 @@ def run_stock_analysis(stock_symbol, analysis_date, analysts, research_depth, ll
         logger.info(f"[{session_id}] 缓存状态: {preparation_result.cache_status}")
 
     except Exception as e:
-        error_msg = f"❌ 数据预获取过程中发生错误: {str(e)}"
+        # 判断是否为连接错误或超时错误
+        if "connection" in str(e).lower() or "timeout" in str(e).lower() or "failed" in str(e).lower():
+            logger.critical(f"🚨 严重告警: 无法连接到Data Service进行数据预获取")
+            logger.critical(f"🚨 请检查Data Service是否启动并可访问")
+            logger.critical(f"🚨 错误详情: {type(e).__name__}: {str(e)}")
+            error_msg = f"❌ 服务连接失败，无法获取数据: {str(e)}"
+        else:
+            error_msg = f"❌ 数据预获取过程中发生错误: {str(e)}"
         update_progress(error_msg)
         logger.error(f"[{session_id}] {error_msg}")
 
@@ -429,6 +436,12 @@ def run_stock_analysis(stock_symbol, analysis_date, analysts, research_depth, ll
         return results
 
     except Exception as e:
+        # 判断是否为连接错误或超时错误
+        if "connection" in str(e).lower() or "timeout" in str(e).lower() or "failed" in str(e).lower():
+            logger.critical(f"🚨 严重告警: 无法连接到后端服务进行股票分析")
+            logger.critical(f"🚨 请检查Agent Service、Data Service和LLM Service是否启动并可访问")
+            logger.critical(f"🚨 错误详情: {type(e).__name__}: {str(e)}")
+
         # 记录分析失败的详细日志
         analysis_duration = time.time() - analysis_start_time
 

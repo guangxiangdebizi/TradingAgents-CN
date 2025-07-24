@@ -219,24 +219,102 @@ class AgentFactory:
             return f"请分析 {symbol} ({company_name})。当前日期：{current_date}"
     
     async def _call_llm_service(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
-        """调用LLM服务"""
+        """调用LLM服务 - 现在通过Agent Service"""
         if not self.session:
             raise RuntimeError("HTTP会话未初始化")
-        
-        async with self.session.post(
-            f"{self.llm_service_url}/api/v1/chat/completions",
-            json=request_data
-        ) as response:
-            if response.status == 200:
-                return await response.json()
-            else:
-                error_text = await response.text()
-                raise Exception(f"LLM服务错误: {response.status} - {error_text}")
-    
-    async def _process_agent_response(self, agent_type: str, llm_response: Dict[str, Any], 
+
+        # 映射Analysis Engine的智能体类型到Agent Service的智能体类型
+        agent_type_mapping = {
+            "technical_analyst": "market_analyst",
+            "fundamentals_analyst": "fundamentals_analyst",
+            "news_analyst": "news_analyst",
+            "bull_researcher": "bull_researcher",
+            "bear_researcher": "bear_researcher",
+            "risk_manager": "risk_manager",
+            "research_manager": "research_manager"
+        }
+
+        original_agent_type = request_data.get("user_id", "").replace("analysis_engine_", "")
+        mapped_agent_type = agent_type_mapping.get(original_agent_type, original_agent_type)
+
+        # 将请求转换为Agent Service格式
+        agent_service_request = {
+            "agent_type": mapped_agent_type,
+            "task_type": "technical_analysis" if mapped_agent_type == "market_analyst" else request_data.get("task_type", "analysis"),
+            "data": {
+                "symbol": self._extract_symbol_from_messages(request_data.get("messages", [])),
+                "market": "CN",
+                "messages": request_data.get("messages", []),
+                "model": request_data.get("model", "deepseek-chat"),
+                "temperature": request_data.get("temperature", 0.1),
+                "max_tokens": request_data.get("max_tokens", 1500)
+            }
+        }
+
+        logger.info(f"🔍 AgentFactory调用Agent Service: {agent_service_request['agent_type']}")
+
+        try:
+            # 调用Agent Service
+            async with self.session.post(
+                "http://localhost:8008/api/v1/agents/execute",
+                json=agent_service_request
+            ) as response:
+                logger.info(f"🔍 Agent Service响应状态: {response.status}")
+
+                if response.status == 200:
+                    agent_response = await response.json()
+                    logger.info(f"🔍 Agent Service响应: {agent_response}")
+
+                    # 转换Agent Service响应为LLM Service格式
+                    if agent_response.get("status") == "completed":
+                        return {
+                            "choices": [{
+                                "message": {
+                                    "role": "assistant",
+                                    "content": agent_response.get("result", "")
+                                }
+                            }],
+                            "model": agent_response.get("agent_type", "unknown"),
+                            "usage": {
+                                "total_tokens": 0
+                            }
+                        }
+                    else:
+                        raise Exception(f"Agent Service任务失败: {agent_response.get('error', 'Unknown error')}")
+                else:
+                    error_text = await response.text()
+                    logger.error(f"❌ Agent Service错误: {response.status} - {error_text}")
+                    raise Exception(f"Agent Service错误: {response.status} - {error_text}")
+
+        except Exception as e:
+            logger.error(f"❌ Agent Service调用失败，回退到LLM Service: {e}")
+
+            # 回退到原始LLM Service
+            async with self.session.post(
+                f"{self.llm_service_url}/api/v1/chat/completions",
+                json=request_data
+            ) as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    error_text = await response.text()
+                    raise Exception(f"LLM服务错误: {response.status} - {error_text}")
+
+    def _extract_symbol_from_messages(self, messages: List[Dict[str, Any]]) -> str:
+        """从消息中提取股票代码"""
+        for message in messages:
+            content = message.get("content", "")
+            # 简单的正则表达式匹配股票代码
+            import re
+            match = re.search(r'\b(\d{6})\b', content)
+            if match:
+                return match.group(1)
+        return "000001"  # 默认值
+
+    async def _process_agent_response(self, agent_type: str, llm_response: Dict[str, Any],
                                     duration: float) -> Dict[str, Any]:
         """处理智能体响应"""
-        
+
         if not llm_response.get("choices"):
             return {
                 "success": False,
@@ -244,10 +322,14 @@ class AgentFactory:
                 "error": "LLM服务无响应",
                 "timestamp": datetime.now().isoformat()
             }
-        
+
         content = llm_response["choices"][0]["message"]["content"]
         model_used = llm_response.get("model", "unknown")
-        
+
+        # 将LLM响应转换为LangChain AIMessage对象
+        from langchain_core.messages import AIMessage
+        ai_message = AIMessage(content=content)
+
         # 根据智能体类型处理响应
         result = {
             "success": True,
@@ -255,7 +337,7 @@ class AgentFactory:
             "model_used": model_used,
             "duration": duration,
             "timestamp": datetime.now().isoformat(),
-            "messages": [llm_response["choices"][0]["message"]]
+            "messages": [ai_message]  # 使用AIMessage对象而不是字典
         }
         
         if agent_type in ["fundamentals_analyst", "technical_analyst", "news_analyst"]:

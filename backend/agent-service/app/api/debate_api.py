@@ -51,6 +51,9 @@ async def start_debate(
 ):
     """启动智能体辩论"""
     try:
+        # 记录接收到的请求
+        logger.info(f"📥 Agent Service接收到辩论请求: {request.model_dump()}")
+
         # 启动辩论
         debate_id = await engine.start_debate(
             topic=request.topic,

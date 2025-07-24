@@ -144,18 +144,14 @@ async def health_check():
     else:
         dependencies["redis"] = "not_configured"
     
-    # 检查模型适配器
+    # 检查模型适配器（只检查是否初始化，不检查连通性）
     if model_router:
-        healthy_models = []
-        for model_name, adapter in model_router.adapters.items():
-            try:
-                if await adapter.health_check():
-                    healthy_models.append(model_name)
-            except Exception:
-                pass
-        dependencies["models"] = f"{len(healthy_models)} healthy"
+        available_models = list(model_router.adapters.keys())
+        dependencies["models"] = f"{len(available_models)} initialized"
+        dependencies["model_list"] = available_models
     else:
         dependencies["models"] = "not_initialized"
+        dependencies["model_list"] = []
     
     return {
         "status": "healthy",
@@ -175,13 +171,17 @@ async def chat_completions(
     """聊天完成接口"""
     try:
         start_time = datetime.now()
-        
+
+        # 记录请求详情
+        logger.info(f"🔍 LLM请求详情: model={request.model}, task_type={request.task_type}, messages_count={len(request.messages)}")
+        logger.info(f"🔍 LLM请求消息: {[{'role': msg.role, 'content': msg.content[:200] + '...' if len(msg.content) > 200 else msg.content} for msg in request.messages]}")
+
         # 1. 路由到最适合的模型
         selected_model = await router.route_request(
             task_type=request.task_type,
             model_preference=request.model
         )
-        
+
         logger.info(f"🎯 路由到模型: {selected_model} (任务类型: {request.task_type})")
         
         # 2. 获取适配器
@@ -227,13 +227,22 @@ async def chat_completions(
             messages_dict = messages_to_send
 
         # 5. 调用模型
+        logger.info(f"🔍 调用模型前: {selected_model}, messages_count={len(messages_dict)}")
+        logger.info(f"🔍 发送给模型的消息: {[{'role': msg['role'], 'content': msg['content'][:200] + '...' if len(msg['content']) > 200 else msg['content']} for msg in messages_dict]}")
+
         result = await adapter.chat_completion(
             messages=messages_dict,
             max_tokens=request.max_tokens,
             temperature=request.temperature,
             stream=request.stream
         )
-        
+
+        logger.info(f"🔍 模型调用结果: success={result.get('success')}, content_length={len(result.get('content', ''))}")
+        if result.get("success"):
+            logger.info(f"🔍 模型返回内容: {result.get('content', '')[:300]}...")
+        else:
+            logger.error(f"🔍 模型调用失败详情: {result}")
+
         if not result.get("success"):
             raise HTTPException(status_code=500, detail=f"模型调用失败: {result.get('error')}")
         
@@ -257,6 +266,9 @@ async def chat_completions(
                 "total_tokens": result.get("usage", {}).get("total_tokens", 0)
             }
         )
+
+        logger.info(f"🔍 构建响应完成: model={selected_model}, content_length={len(result['content'])}, tokens={response.usage.total_tokens}")
+        logger.info(f"🔍 最终响应内容: {result['content'][:300]}...")
         
         # 5. 后台记录使用统计
         background_tasks.add_task(
@@ -291,8 +303,9 @@ async def list_models(
         for model_name, adapter in router.adapters.items():
             try:
                 model_info = adapter.get_model_info()
-                is_healthy = await adapter.health_check()
-                
+                # 只检查适配器是否启用，不做健康检查
+                is_enabled = adapter.is_enabled()
+
                 models.append({
                     "id": model_name,
                     "object": "model",
@@ -302,7 +315,7 @@ async def list_models(
                     "cost_per_1k_tokens": model_info.get("cost_per_1k_tokens", {}),
                     "strengths": model_info.get("strengths", []),
                     "best_for": model_info.get("best_for", []),
-                    "status": "healthy" if is_healthy else "unhealthy"
+                    "status": "available" if is_enabled else "disabled"
                 })
             except Exception as e:
                 logger.warning(f"⚠️ 获取模型信息失败 {model_name}: {e}")

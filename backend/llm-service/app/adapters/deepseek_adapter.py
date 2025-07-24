@@ -117,21 +117,41 @@ class DeepSeekAdapter(BaseLLMAdapter):
             "best_for": ["financial_analysis", "code_generation", "reasoning", "chinese_tasks"]
         }
     
-    async def health_check(self) -> bool:
-        """健康检查"""
+    async def health_check(self) -> Dict[str, Any]:
+        """健康检查 - 只检查配置，不做实际API调用"""
         if not self.is_enabled():
-            return False
-        
+            return {
+                "status": "unhealthy",
+                "provider": "deepseek",
+                "model": self.model_name,
+                "error": "适配器未启用或配置不完整"
+            }
+
+        # 只检查配置是否完整，不做实际API调用
         try:
-            # 发送简单的测试请求
-            response = await self.client.chat.completions.create(
-                model=self.model_name,
-                messages=[{"role": "user", "content": "Hello"}],
-                max_tokens=5,
-                timeout=10
-            )
-            return bool(response.choices[0].message.content)
-            
+            has_api_key = bool(self.api_key)
+            has_client = self.client is not None
+
+            if has_api_key and has_client:
+                return {
+                    "status": "healthy",
+                    "provider": "deepseek",
+                    "model": self.model_name,
+                    "api_key_configured": True,
+                    "client_initialized": True
+                }
+            else:
+                return {
+                    "status": "unhealthy",
+                    "provider": "deepseek",
+                    "model": self.model_name,
+                    "error": f"配置不完整 - API Key: {has_api_key}, Client: {has_client}"
+                }
+
         except Exception as e:
-            logger.warning(f"⚠️ DeepSeek健康检查失败: {e}")
-            return False
+            return {
+                "status": "unhealthy",
+                "provider": "deepseek",
+                "model": self.model_name,
+                "error": f"健康检查异常: {str(e)}"
+            }

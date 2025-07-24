@@ -100,26 +100,38 @@ class AgentManager:
     async def register_agent(self, agent: BaseAgent) -> bool:
         """注册智能体"""
         try:
+            # 添加详细调试日志
+            logger.info(f"🔍 开始注册智能体: {agent.agent_type.value} (ID: {agent.agent_id})")
+
             # 检查是否已存在
             if agent.agent_id in self.agents:
                 logger.warning(f"⚠️ 智能体已存在: {agent.agent_id}")
                 return False
-            
+
             # 注册到本地注册表
+            logger.info(f"🔍 注册到本地注册表: {agent.agent_type.value}")
             self.agents[agent.agent_id] = agent
+
+            logger.info(f"🔍 添加到类型列表: {agent.agent_type.value}")
             self.agent_types[agent.agent_type].append(agent)
-            
+
+            logger.info(f"🔍 当前 {agent.agent_type.value} 类型智能体数量: {len(self.agent_types[agent.agent_type])}")
+
             # 注册到Redis（用于分布式发现）
+            logger.info(f"🔍 注册到Redis: {agent.agent_type.value}")
             await self._register_to_redis(agent)
-            
+
             # 保存到数据库
+            logger.info(f"🔍 保存到数据库: {agent.agent_type.value}")
             await self._save_agent_to_db(agent)
-            
+
             logger.info(f"✅ 智能体注册成功: {agent.agent_type.value} (ID: {agent.agent_id})")
             return True
-            
+
         except Exception as e:
             logger.error(f"❌ 智能体注册失败: {e}")
+            import traceback
+            logger.error(f"❌ 详细错误信息: {traceback.format_exc()}")
             return False
     
     async def unregister_agent(self, agent_id: str) -> bool:
@@ -154,7 +166,21 @@ class AgentManager:
     
     async def get_agents_by_type(self, agent_type: AgentType) -> List[BaseAgent]:
         """根据类型获取智能体"""
-        return self.agent_types.get(agent_type, [])
+        logger.info(f"🔍 查询智能体类型: {agent_type.value}")
+
+        # 直接通过值查找，避免枚举对象比较问题
+        agents = []
+        for key, value_list in self.agent_types.items():
+            if key.value == agent_type.value:
+                agents = value_list
+                logger.info(f"🔍 找到 {len(agents)} 个 {agent_type.value} 智能体")
+                break
+
+        if not agents:
+            logger.warning(f"⚠️ 未找到类型为 {agent_type.value} 的智能体")
+            logger.info(f"🔍 可用智能体类型: {[key.value for key in self.agent_types.keys()]}")
+
+        return agents
     
     async def get_available_agent(
         self,
@@ -163,22 +189,40 @@ class AgentManager:
         market: str = "US"
     ) -> Optional[BaseAgent]:
         """获取可用的智能体"""
+        # 添加详细调试日志
+        logger.info(f"🔍 查找智能体: agent_type={agent_type}, agent_type.value={agent_type.value}")
+
         agents = await self.get_agents_by_type(agent_type)
-        
+        logger.info(f"🔍 找到 {len(agents)} 个 {agent_type.value} 类型的智能体")
+
         # 过滤可用的智能体
-        available_agents = [
-            agent for agent in agents
-            if (agent.status == AgentStatus.IDLE and
-                agent.can_handle_task(task_type, market))
-        ]
-        
+        available_agents = []
+        for agent in agents:
+            is_idle = agent.status == AgentStatus.IDLE
+            can_handle = agent.can_handle_task(task_type, market)
+
+            logger.info(f"🔍 智能体 {agent.agent_id[:8]}: idle={is_idle}, can_handle={can_handle}")
+            if not can_handle:
+                logger.info(f"🔍 智能体能力: {[cap.name for cap in agent.capabilities]}")
+                logger.info(f"🔍 支持市场: {[cap.supported_markets for cap in agent.capabilities]}")
+                logger.info(f"🔍 请求任务类型: {task_type}, 请求市场: {market}")
+
+            if is_idle and can_handle:
+                available_agents.append(agent)
+
+        logger.info(f"🔍 其中 {len(available_agents)} 个智能体可用")
+
         if not available_agents:
             logger.warning(f"⚠️ 没有可用的智能体: {agent_type.value}")
+            # 添加更多调试信息
+            logger.info(f"🔍 所有智能体状态:")
+            for agent in agents:
+                logger.info(f"  - {agent.agent_type.value} (ID: {agent.agent_id}): status={agent.status}")
             return None
-        
+
         # 使用负载均衡选择智能体
         selected_agent = self.load_balancer.select_agent(available_agents)
-        
+
         logger.info(f"🎯 选择智能体: {selected_agent.agent_type.value} (ID: {selected_agent.agent_id})")
         return selected_agent
     
@@ -190,19 +234,26 @@ class AgentManager:
     ) -> TaskResult:
         """执行任务"""
         try:
+            # 添加详细调试日志
+            logger.info(f"🔍 执行任务开始: agent_type={agent_type}, task_type={task_type}")
+            logger.info(f"🔍 agent_type.value={agent_type.value}, type={type(agent_type)}")
+
             # 获取可用智能体
             agent = await self.get_available_agent(agent_type, task_type, context.market)
             if not agent:
+                logger.error(f"🔍 获取智能体失败: agent_type={agent_type}, agent_type.value={agent_type.value}")
                 raise Exception(f"没有可用的智能体: {agent_type.value}")
-            
+
+            logger.info(f"🔍 获取到智能体: {agent.agent_type.value}")
+
             # 执行任务
             result = await agent.execute_task(context)
-            
+
             # 记录任务结果
             await self._record_task_result(result)
-            
+
             return result
-            
+
         except Exception as e:
             logger.error(f"❌ 任务执行失败: {e}")
             # 返回错误结果

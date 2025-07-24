@@ -73,6 +73,139 @@ from tradingagents.dataflows.interface import (
 # 导入数据库访问层
 from backend.shared.database.mongodb import get_db_manager, get_stock_repository
 
+
+def _parse_stock_data_to_structured_format(stock_data: str, symbol: str, start_date: str, end_date: str) -> dict:
+    """
+    解析股票数据字符串为结构化格式
+    支持Markdown格式和表格数据的混合格式
+
+    Args:
+        stock_data: 格式化的股票数据字符串
+        symbol: 股票代码
+        start_date: 开始日期
+        end_date: 结束日期
+
+    Returns:
+        dict: 结构化的股票数据
+    """
+    try:
+        # 初始化结果结构
+        result = {
+            "symbol": symbol,
+            "start_date": start_date,
+            "end_date": end_date,
+            "close_prices": [],
+            "volumes": [],
+            "open_prices": [],
+            "high_prices": [],
+            "low_prices": [],
+            "dates": [],
+            "raw_data": stock_data
+        }
+
+        lines = stock_data.strip().split('\n')
+
+        # 查找数据表格部分（通常在"最新交易数据"或"最新数据"之后）
+        data_start_index = -1
+
+        # 方法1：查找包含表格头部的行
+        for i, line in enumerate(lines):
+            # 查找包含列名的行（Tushare格式）
+            if ('ts_code' in line and 'trade_date' in line) or \
+               ('代码' in line and '日期' in line) or \
+               ('open' in line and 'high' in line and 'low' in line and 'close' in line):
+                data_start_index = i
+                print(f"🔍 找到表格头部: {line}")
+                break
+
+        # 方法2：如果没找到标准头部，查找数据行模式
+        if data_start_index == -1:
+            for i, line in enumerate(lines):
+                # 查找包含股票代码和数字的行（数据行特征）
+                if symbol in line and any(char.isdigit() for char in line):
+                    # 检查是否是表格数据行格式
+                    parts = line.split()
+                    if len(parts) >= 6:  # 至少包含代码、日期、开盘、最高、最低、收盘
+                        data_start_index = i
+                        print(f"🔍 找到数据行开始: {line}")
+                        break
+
+        if data_start_index == -1:
+            print(f"⚠️ 无法找到数据表格: {symbol}")
+            return result
+
+        # 解析数据行
+        for line in lines[data_start_index:]:
+            if not line.strip() or line.startswith('#') or line.startswith('##'):
+                continue
+
+            # 跳过表格头部行
+            if 'ts_code' in line or 'trade_date' in line or '代码' in line or '日期' in line:
+                continue
+
+            # 解析数据行（支持空格分隔和逗号分隔）
+            parts = line.split() if ' ' in line else line.split(',')
+
+            if len(parts) >= 6:  # 至少包含代码、日期、开盘、最高、最低、收盘
+                try:
+                    # Tushare格式: ts_code trade_date open high low close pre_close change pct_chg vol amount
+                    if len(parts) >= 10:  # 完整的Tushare格式
+                        ts_code = parts[0].strip()
+                        trade_date = parts[1].strip()
+                        open_price = float(parts[2].strip()) if parts[2].strip() and parts[2].strip() != 'NaN' else 0.0
+                        high_price = float(parts[3].strip()) if parts[3].strip() and parts[3].strip() != 'NaN' else 0.0
+                        low_price = float(parts[4].strip()) if parts[4].strip() and parts[4].strip() != 'NaN' else 0.0
+                        close_price = float(parts[5].strip()) if parts[5].strip() and parts[5].strip() != 'NaN' else 0.0
+                        volume = int(float(parts[9].strip())) if parts[9].strip() and parts[9].strip() != 'NaN' else 0
+
+                        result["dates"].append(trade_date)
+                        result["open_prices"].append(open_price)
+                        result["high_prices"].append(high_price)
+                        result["low_prices"].append(low_price)
+                        result["close_prices"].append(close_price)
+                        result["volumes"].append(volume)
+
+                    else:  # 简化格式
+                        date = parts[1].strip() if len(parts) > 1 else parts[0].strip()
+                        open_price = float(parts[2].strip()) if len(parts) > 2 and parts[2].strip() and parts[2].strip() != 'NaN' else 0.0
+                        high_price = float(parts[3].strip()) if len(parts) > 3 and parts[3].strip() and parts[3].strip() != 'NaN' else 0.0
+                        low_price = float(parts[4].strip()) if len(parts) > 4 and parts[4].strip() and parts[4].strip() != 'NaN' else 0.0
+                        close_price = float(parts[5].strip()) if len(parts) > 5 and parts[5].strip() and parts[5].strip() != 'NaN' else 0.0
+                        volume = int(float(parts[6].strip())) if len(parts) > 6 and parts[6].strip() and parts[6].strip() != 'NaN' else 0
+
+                        result["dates"].append(date)
+                        result["open_prices"].append(open_price)
+                        result["high_prices"].append(high_price)
+                        result["low_prices"].append(low_price)
+                        result["close_prices"].append(close_price)
+                        result["volumes"].append(volume)
+
+                except (ValueError, IndexError) as e:
+                    print(f"⚠️ 解析数据行失败: {line} - {e}")
+                    continue
+
+        print(f"✅ 解析股票数据成功: {symbol}, 共{len(result['close_prices'])}条记录")
+        return result
+
+    except Exception as e:
+        print(f"❌ 解析股票数据失败: {symbol} - {e}")
+        import traceback
+        print(f"❌ 详细错误: {traceback.format_exc()}")
+        return {
+            "symbol": symbol,
+            "start_date": start_date,
+            "end_date": end_date,
+            "close_prices": [],
+            "volumes": [],
+            "open_prices": [],
+            "high_prices": [],
+            "low_prices": [],
+            "dates": [],
+            "raw_data": stock_data,
+            "error": str(e)
+        }
+
+
 # 全局变量
 logger = get_service_logger("data-service")
 debug_logger = get_i18n_logger("data-service-debug")
@@ -512,23 +645,32 @@ async def get_stock_data(
                 )
         
         # 从数据源获取
+        logger.info(f"🔍 调用数据源获取: {request.symbol}")
         stock_data = get_china_stock_data_unified(
             request.symbol,
             request.start_date,
             request.end_date
         )
-        
+
+        logger.info(f"🔍 原始数据类型: {type(stock_data)}")
+        logger.info(f"🔍 原始数据长度: {len(str(stock_data)) if stock_data else 0}")
+        logger.info(f"🔍 原始数据完整内容: {str(stock_data) if stock_data else 'None'}")
+
         if not stock_data or "错误" in str(stock_data):
             raise HTTPException(status_code=404, detail=f"未找到股票 {request.symbol} 的数据")
-        
-        # 解析数据（这里需要根据实际返回格式调整）
-        # 假设返回的是CSV格式的字符串，需要解析成结构化数据
-        parsed_data = {
-            "symbol": request.symbol,
-            "data": stock_data,  # 暂时直接返回原始数据
-            "start_date": request.start_date,
-            "end_date": request.end_date
-        }
+
+        # 解析数据为结构化格式
+        logger.info(f"🔍 开始解析数据为结构化格式: {request.symbol}")
+        parsed_data = _parse_stock_data_to_structured_format(
+            stock_data, request.symbol, request.start_date, request.end_date
+        )
+
+        logger.info(f"🔍 解析后数据类型: {type(parsed_data)}")
+        logger.info(f"🔍 解析后数据键: {list(parsed_data.keys()) if isinstance(parsed_data, dict) else 'Not a dict'}")
+        if isinstance(parsed_data, dict):
+            logger.info(f"🔍 close_prices数量: {len(parsed_data.get('close_prices', []))}")
+            logger.info(f"🔍 volumes数量: {len(parsed_data.get('volumes', []))}")
+        logger.info(f"🔍 解析后数据: {str(parsed_data)[:300]}")
         
         # 缓存数据
         if redis_client:

@@ -23,8 +23,8 @@ scripts\quick-start.bat
 
 ```bash
 # 1. 配置环境变量
-cp .env.example .env
-vim .env  # 填入API密钥
+cp backend/.backend_env.example backend/.backend_env
+vim backend/.backend_env  # 填入API密钥
 
 # 2. 启动所有服务
 docker-compose up -d
@@ -211,7 +211,7 @@ python scripts/test-mongodb-performance.py
 ### 必需的API密钥
 
 ```bash
-# .env 文件配置
+# backend/.backend_env 文件配置
 DASHSCOPE_API_KEY=your_dashscope_api_key_here    # 阿里百炼（必需）
 TUSHARE_TOKEN=your_tushare_token_here            # Tushare数据（必需）
 ```

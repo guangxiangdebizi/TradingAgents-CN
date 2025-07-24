@@ -160,7 +160,7 @@ ANALYSIS_ENGINE_URL=http://localhost:8001
 
 ### 数据源配置
 
-在 `.env` 文件中配置 API 密钥：
+在 `.backend_env` 文件中配置 API 密钥：
 
 ```bash
 # Tushare

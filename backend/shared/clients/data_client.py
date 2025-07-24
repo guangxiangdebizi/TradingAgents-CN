@@ -90,7 +90,13 @@ class DataClient(BaseServiceClient):
             return response
             
         except Exception as e:
-            self.logger.error(f"Get market data failed: {e}")
+            # 判断是否为连接错误或超时错误
+            if "connection" in str(e).lower() or "timeout" in str(e).lower() or "failed" in str(e).lower():
+                self.logger.critical(f"🚨 严重告警: Data Service不可达 - 无法获取市场数据")
+                self.logger.critical(f"🚨 请检查Data Service是否启动: {self.base_url}")
+                self.logger.critical(f"🚨 错误详情: {type(e).__name__}: {str(e)}")
+            else:
+                self.logger.error(f"Get market data failed: {e}")
             raise
     
     async def get_financial_data(
@@ -360,18 +366,33 @@ class DataClient(BaseServiceClient):
         """
         try:
             params = {"symbol": symbol, "period": period, "interval": interval, **kwargs}
+            self.logger.info(f"🔍 请求价格历史: {symbol}, params: {params}")
             response = await self.get("/api/v1/market/history", params=params)
 
+            self.logger.info(f"🔍 响应类型: {type(response)}")
+            self.logger.info(f"🔍 响应内容: {str(response)[:500] if response else 'None'}")
+
             if response.get("success"):
+                data = response.get("data", {})
                 self.logger.info(f"✅ 获取价格历史成功: {symbol}")
-                return response.get("data", {})
+                self.logger.info(f"🔍 返回数据类型: {type(data)}")
+                self.logger.info(f"🔍 返回数据内容: {str(data)[:300] if data else 'None'}")
+                if isinstance(data, dict):
+                    self.logger.info(f"🔍 数据键: {list(data.keys())}")
+                return data
             else:
                 error_msg = response.get("message", "未知错误")
                 self.logger.error(f"❌ 获取价格历史失败: {symbol} - {error_msg}")
                 return {}
 
         except Exception as e:
-            self.logger.error(f"❌ 获取价格历史失败: {e}")
+            # 判断是否为连接错误或超时错误
+            if "connection" in str(e).lower() or "timeout" in str(e).lower() or "failed" in str(e).lower():
+                self.logger.critical(f"🚨 严重告警: Data Service不可达 - 无法获取价格历史数据")
+                self.logger.critical(f"🚨 请检查Data Service是否启动: {self.base_url}")
+                self.logger.critical(f"🚨 错误详情: {type(e).__name__}: {str(e)}")
+            else:
+                self.logger.error(f"❌ 获取价格历史失败: {e}")
             raise
 
 

@@ -129,25 +129,63 @@ class MarketAnalyst(BaseAgent):
             response = await self.data_client.get_market_data(symbol, market)
             return response.get("data", {})
         except Exception as e:
-            logger.error(f"❌ 获取市场数据失败: {symbol} - {e}")
+            # 判断是否为连接错误或超时错误
+            if "connection" in str(e).lower() or "timeout" in str(e).lower() or "failed" in str(e).lower():
+                logger.critical(f"🚨 严重告警: 无法连接Data Service获取市场数据 - {symbol}")
+                logger.critical(f"🚨 请检查Data Service是否启动并可访问")
+                logger.critical(f"🚨 错误详情: {type(e).__name__}: {str(e)}")
+            else:
+                logger.error(f"❌ 获取市场数据失败: {symbol} - {e}")
             return {}
     
     async def _get_price_history(self, symbol: str, market: str, days: int = 252) -> Dict[str, Any]:
         """获取价格历史数据"""
         try:
+            logger.info(f"🔍 Market Analyst 请求价格历史: {symbol}, market: {market}, days: {days}")
             response = await self.data_client.get_price_history(symbol, market, days)
-            return response.get("data", {})
+
+            logger.info(f"🔍 Market Analyst 收到响应类型: {type(response)}")
+            logger.info(f"🔍 Market Analyst 收到响应内容: {str(response)[:300] if response else 'None'}")
+
+            if isinstance(response, dict):
+                # Data Client已经提取了data字段，直接返回响应
+                logger.info(f"🔍 Market Analyst 直接使用响应数据: {type(response)}")
+                logger.info(f"🔍 Market Analyst 响应数据内容: {str(response)[:300] if response else 'None'}")
+                return response
+            else:
+                logger.error(f"🔍 Market Analyst 响应不是字典: {type(response)}")
+                return {}
         except Exception as e:
-            logger.error(f"❌ 获取价格历史失败: {symbol} - {e}")
+            # 判断是否为连接错误或超时错误
+            if "connection" in str(e).lower() or "timeout" in str(e).lower() or "failed" in str(e).lower():
+                logger.critical(f"🚨 严重告警: 无法连接Data Service获取价格历史 - {symbol}")
+                logger.critical(f"🚨 请检查Data Service是否启动并可访问")
+                logger.critical(f"🚨 错误详情: {type(e).__name__}: {str(e)}")
+            else:
+                logger.error(f"❌ 获取价格历史失败: {symbol} - {e}")
+                import traceback
+                logger.error(f"❌ 详细错误: {traceback.format_exc()}")
             return {}
     
     async def _calculate_technical_indicators(self, price_history: Dict[str, Any]) -> Dict[str, Any]:
         """计算技术指标"""
         try:
-            prices = price_history.get("close_prices", [])
-            volumes = price_history.get("volumes", [])
-            
+            logger.info(f"🔍 计算技术指标 - 输入数据类型: {type(price_history)}")
+            logger.info(f"🔍 计算技术指标 - 输入数据内容: {str(price_history)[:300] if price_history else 'None'}")
+
+            if isinstance(price_history, dict):
+                logger.info(f"🔍 计算技术指标 - 数据键: {list(price_history.keys())}")
+                prices = price_history.get("close_prices", [])
+                volumes = price_history.get("volumes", [])
+                logger.info(f"🔍 计算技术指标 - prices类型: {type(prices)}, 长度: {len(prices) if prices else 0}")
+                logger.info(f"🔍 计算技术指标 - volumes类型: {type(volumes)}, 长度: {len(volumes) if volumes else 0}")
+            else:
+                logger.error(f"🔍 计算技术指标 - 输入不是字典: {type(price_history)}")
+                prices = []
+                volumes = []
+
             if not prices:
+                logger.warning(f"🔍 计算技术指标 - 没有价格数据")
                 return {}
             
             # 移动平均线
@@ -538,7 +576,13 @@ class MarketAnalyst(BaseAgent):
             return response.get("content", "分析报告生成失败")
             
         except Exception as e:
-            logger.error(f"❌ 生成分析报告失败: {e}")
+            # 判断是否为连接错误或超时错误
+            if "connection" in str(e).lower() or "timeout" in str(e).lower() or "failed" in str(e).lower():
+                logger.critical(f"🚨 严重告警: 无法连接LLM Service生成分析报告")
+                logger.critical(f"🚨 请检查LLM Service是否启动并可访问")
+                logger.critical(f"🚨 错误详情: {type(e).__name__}: {str(e)}")
+            else:
+                logger.error(f"❌ 生成分析报告失败: {e}")
             return f"分析报告生成失败: {str(e)}"
     
     async def _generate_trading_signals(

@@ -10,8 +10,10 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import redis.asyncio as redis
 import uuid
@@ -86,6 +88,24 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# 添加验证错误处理器
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """处理请求验证错误，提供详细的错误信息"""
+    logger.error(f"❌ 请求验证失败: {request.method} {request.url}")
+    logger.error(f"📋 请求体: {await request.body()}")
+    logger.error(f"🔍 验证错误详情: {exc.errors()}")
+
+    return JSONResponse(
+        status_code=422,
+        content={
+            "success": False,
+            "message": "请求数据验证失败",
+            "errors": exc.errors(),
+            "detail": str(exc)
+        }
+    )
 
 # 添加CORS中间件
 app.add_middleware(
@@ -194,8 +214,12 @@ async def perform_stock_analysis(analysis_id: str, request: AnalysisRequest):
     """执行股票分析（后台任务）"""
     try:
         logger.info(f"🔍 开始分析: {analysis_id} - {request.stock_code}")
-        
+        logger.info(f"🔍 perform_stock_analysis 被调用")
+        logger.info(f"🔍 分析参数: analysis_id={analysis_id}, stock_code={request.stock_code}")
+        logger.info(f"🔍 请求详情: {request}")
+
         # 更新进度：开始分析
+        logger.info(f"🔍 更新分析进度...")
         await update_analysis_progress(
             analysis_id,
             AnalysisStatus.RUNNING,
@@ -204,6 +228,7 @@ async def perform_stock_analysis(analysis_id: str, request: AnalysisRequest):
             "初始化AI分析引擎，准备开始分析",
             f"📊 开始分析 {request.stock_code} 股票，这可能需要几分钟时间..."
         )
+        logger.info(f"🔍 分析进度更新完成")
         
         # 准备分析参数
         analysis_config = {
@@ -245,22 +270,25 @@ async def perform_stock_analysis(analysis_id: str, request: AnalysisRequest):
             f"🤖 AI正在分析 {request.stock_code}，请耐心等待..."
         )
         
-        # 使用独立分析器进行分析
-        config = ANALYSIS_CONFIG.copy()
-        config.update({
-            "llm_provider": analysis_config.get("llm_provider", "deepseek"),
-            "debug_mode": analysis_config.get("debug_mode", False),
-            "enable_tradingagents_api": True  # 尝试调用TradingAgents API
-        })
+        # 使用图引擎进行完整的多智能体分析
+        logger.info(f"🔍 导入 TradingGraph...")
+        from .graphs.trading_graph import TradingGraph
 
-        # 初始化独立分析器
-        analyzer = IndependentAnalyzer(config=config)
+        # 初始化图引擎
+        logger.info(f"🔍 创建 TradingGraph 实例...")
+        analyzer = TradingGraph()
+        logger.info(f"🔍 初始化图引擎...")
+        await analyzer.initialize()  # 初始化图引擎和所有组件
+        logger.info(f"🔍 图引擎初始化完成")
 
-        # 执行分析
+        # 执行图分析 - 使用完整的多智能体图流程
+        logger.info(f"🔍 开始执行图分析...")
+        logger.info(f"🔍 调用 analyzer.analyze_stock({analysis_config['company_of_interest']}, {analysis_config['trade_date']})")
         analysis_result_raw = await analyzer.analyze_stock(
             analysis_config["company_of_interest"],
             analysis_config["trade_date"]
         )
+        logger.info(f"🔍 图分析执行完成，结果: {analysis_result_raw}")
         
         # 更新进度：生成报告
         await update_analysis_progress(
@@ -350,9 +378,12 @@ async def start_analysis(
 ):
     """开始股票分析"""
     try:
+        # 记录接收到的请求
+        logger.info(f"📥 分析引擎接收到请求: {request.model_dump()}")
+
         # 生成分析ID
         analysis_id = str(uuid.uuid4())
-        
+
         logger.info(f"🚀 启动分析任务: {analysis_id} - {request.stock_code}")
         
         # 初始化进度

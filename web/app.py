@@ -794,9 +794,16 @@ def main():
                         logger.info(f"✅ [分析完成] 股票分析成功完成: {analysis_id}")
 
                     except Exception as e:
-                        # 标记分析失败（不访问session state）
-                        async_tracker.mark_failed(str(e))
-                        logger.error(f"❌ [分析失败] {analysis_id}: {e}")
+                        # 判断是否为连接错误或超时错误
+                        if "connection" in str(e).lower() or "timeout" in str(e).lower() or "failed" in str(e).lower():
+                            logger.critical(f"🚨 严重告警: 无法连接到后端服务进行分析")
+                            logger.critical(f"🚨 请检查Agent Service和Data Service是否启动并可访问")
+                            logger.critical(f"🚨 错误详情: {type(e).__name__}: {str(e)}")
+                            async_tracker.mark_failed(f"服务连接失败: {str(e)}")
+                        else:
+                            # 标记分析失败（不访问session state）
+                            async_tracker.mark_failed(str(e))
+                            logger.error(f"❌ [分析失败] {analysis_id}: {e}")
 
                     finally:
                         # 分析结束后注销线程
