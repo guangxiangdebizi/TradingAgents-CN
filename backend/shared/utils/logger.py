@@ -65,6 +65,10 @@ def setup_logger(
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(getattr(logging, level.upper()))
     console_handler.setFormatter(ColoredFormatter())
+
+    # 设置立即刷新，避免日志缓冲
+    console_handler.flush = lambda: sys.stdout.flush()
+
     logger.addHandler(console_handler)
     
     # 文件处理器（如果指定了文件路径）

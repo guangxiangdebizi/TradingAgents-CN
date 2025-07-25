@@ -32,13 +32,12 @@ logger = get_service_logger("api-gateway")
 analysis_engine_client: Optional[BaseServiceClient] = None
 data_service_client: Optional[BaseServiceClient] = None
 llm_service_client: Optional[BaseServiceClient] = None
-agent_service_client: Optional[BaseServiceClient] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
-    global analysis_engine_client, data_service_client, llm_service_client, agent_service_client
+    global analysis_engine_client, data_service_client, llm_service_client
     
     # 启动时初始化
     logger.info("🚀 API Gateway 启动中...")
@@ -48,7 +47,6 @@ async def lifespan(app: FastAPI):
         analysis_engine_client = BaseServiceClient("analysis_engine")
         data_service_client = BaseServiceClient("data_service")
         llm_service_client = BaseServiceClient("llm_service")
-        agent_service_client = BaseServiceClient("agent_service")
 
         # 检查服务健康状态
         if await analysis_engine_client.health_check():
@@ -65,11 +63,6 @@ async def lifespan(app: FastAPI):
             logger.info("✅ LLM Service 连接成功")
         else:
             logger.warning("⚠️ LLM Service 连接失败")
-
-        if await agent_service_client.health_check():
-            logger.info("✅ Agent Service 连接成功")
-        else:
-            logger.warning("⚠️ Agent Service 连接失败")
             
     except Exception as e:
         logger.warning(f"⚠️ 服务客户端初始化失败: {e}")
@@ -168,13 +161,7 @@ async def health_check():
     else:
         dependencies["llm_service"] = "not_configured"
 
-    if agent_service_client:
-        if await agent_service_client.health_check():
-            dependencies["agent_service"] = "healthy"
-        else:
-            dependencies["agent_service"] = "unhealthy"
-    else:
-        dependencies["agent_service"] = "not_configured"
+
 
     return HealthCheck(
         service_name="api-gateway",
@@ -206,8 +193,8 @@ async def start_analysis(request: AnalysisRequest, background_tasks: BackgroundT
     except httpx.HTTPError as e:
         # 判断是否为连接错误或超时错误
         if isinstance(e, (httpx.ConnectError, httpx.TimeoutException)):
-            logger.critical(f"🚨 严重告警: Agent Service不可达 - 无法启动分析")
-            logger.critical(f"🚨 请检查Agent Service是否启动并可访问")
+            logger.critical(f"🚨 严重告警: Analysis Engine不可达 - 无法启动分析")
+            logger.critical(f"🚨 请检查Analysis Engine是否启动并可访问")
             logger.critical(f"🚨 错误详情: {type(e).__name__}: {str(e)}")
         else:
             logger.error(f"❌ 分析引擎请求失败: {e}")
@@ -885,34 +872,7 @@ async def market_history(symbol: str, period: str = "1y", interval: str = "1d"):
 
 # ==================== Agent服务路由 ====================
 
-@app.get("/api/v1/agents")
-async def get_agents():
-    """获取智能体列表"""
-    try:
-        if not agent_service_client:
-            raise HTTPException(status_code=503, detail="Agent服务不可用")
-
-        response = await agent_service_client.get("/api/v1/agents")
-        return response
-
-    except Exception as e:
-        logger.error(f"❌ Agent服务请求失败: {e}")
-        raise HTTPException(status_code=500, detail=f"Agent服务请求失败: {str(e)}")
-
-
-@app.get("/api/v1/tasks")
-async def get_tasks():
-    """获取任务列表"""
-    try:
-        if not agent_service_client:
-            raise HTTPException(status_code=503, detail="Agent服务不可用")
-
-        response = await agent_service_client.get("/api/v1/tasks")
-        return response
-
-    except Exception as e:
-        logger.error(f"❌ Agent服务请求失败: {e}")
-        raise HTTPException(status_code=500, detail=f"Agent服务请求失败: {str(e)}")
+# Agent相关的API端点已移除，智能体现在直接集成在Analysis Engine中
 
 
 if __name__ == "__main__":

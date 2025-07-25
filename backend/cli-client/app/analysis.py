@@ -151,7 +151,7 @@ async def monitor_analysis_progress(client: BackendClient, analysis_id: str):
                 # 检查完成状态
                 if current_status == "completed":
                     progress.update(task, completed=100, description="分析完成!")
-                    ui.show_success("✅ 分析完成!")
+                    ui.show_success("分析完成!")
                     
                     # 获取并显示结果
                     await display_analysis_results(client, analysis_id)

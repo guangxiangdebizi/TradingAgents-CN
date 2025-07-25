@@ -68,7 +68,7 @@ class CLIUserInterface:
 
     def show_success(self, message: str):
         """显示成功信息"""
-        self.console.print(f"[green]✅ {message}[/green]")
+        self.console.print(f"[green]✅ ✅ {message}[/green]")
         self.logger.info(f"成功: {message}")
 
     def show_error(self, message: str):
@@ -84,6 +84,7 @@ class CLIUserInterface:
     def show_step_header(self, step: int, title: str):
         """显示步骤标题"""
         self.console.print(f"\n[bold blue]步骤 {step}: {title}[/bold blue]")
+        self.console.print("─" * 60)
 
 # 创建全局UI管理器
 ui = CLIUserInterface()

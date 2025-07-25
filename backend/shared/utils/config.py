@@ -57,7 +57,6 @@ class Config:
             'TASK_SCHEDULER_PORT': int(os.getenv('TASK_SCHEDULER_PORT', '8003')),
             'LLM_SERVICE_PORT': int(os.getenv('LLM_SERVICE_PORT', '8004')),
             'MEMORY_SERVICE_PORT': int(os.getenv('MEMORY_SERVICE_PORT', '8006')),
-            'AGENT_SERVICE_PORT': int(os.getenv('AGENT_SERVICE_PORT', '8008')),
 
             # 服务地址
             'API_GATEWAY_HOST': os.getenv('API_GATEWAY_HOST', 'localhost'),
@@ -66,7 +65,6 @@ class Config:
             'TASK_SCHEDULER_HOST': os.getenv('TASK_SCHEDULER_HOST', 'localhost'),
             'LLM_SERVICE_HOST': os.getenv('LLM_SERVICE_HOST', 'localhost'),
             'MEMORY_SERVICE_HOST': os.getenv('MEMORY_SERVICE_HOST', 'localhost'),
-            'AGENT_SERVICE_HOST': os.getenv('AGENT_SERVICE_HOST', 'localhost'),
             
             # 数据库配置
             'REDIS_URL': os.getenv('REDIS_URL', 'redis://localhost:6379'),
@@ -114,7 +112,6 @@ class Config:
             'DATA_SERVICE': 8002,
             'TASK_SCHEDULER': 8003,
             'LLM_SERVICE': 8004,
-            'AGENT_SERVICE': 8008,  # 修复：Agent Service实际端口是8008
             'MEMORY_SERVICE': 8006,
         }
 

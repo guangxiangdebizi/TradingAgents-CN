@@ -284,11 +284,39 @@ async def perform_stock_analysis(analysis_id: str, request: AnalysisRequest):
         # 执行图分析 - 使用完整的多智能体图流程
         logger.info(f"🔍 开始执行图分析...")
         logger.info(f"🔍 调用 analyzer.analyze_stock({analysis_config['company_of_interest']}, {analysis_config['trade_date']})")
+
+        # 强制刷新日志
+        import sys
+        sys.stdout.flush()
+        sys.stderr.flush()
+
+        # 添加进度回调
+        async def progress_callback(step: str, progress: int, message: str):
+            logger.info(f"📊 [{progress}%] {step}: {message}")
+            await update_analysis_progress(
+                analysis_id,
+                AnalysisStatus.RUNNING,
+                min(60 + progress // 3, 85),  # 60-85%的进度范围
+                step,
+                message,
+                f"🤖 {message}"
+            )
+            # 强制刷新
+            sys.stdout.flush()
+            sys.stderr.flush()
+
+        # 执行分析并传入进度回调
         analysis_result_raw = await analyzer.analyze_stock(
             analysis_config["company_of_interest"],
-            analysis_config["trade_date"]
+            analysis_config["trade_date"],
+            progress_callback=progress_callback
         )
-        logger.info(f"🔍 图分析执行完成，结果: {analysis_result_raw}")
+        logger.info(f"🔍 图分析执行完成，结果类型: {type(analysis_result_raw)}")
+        logger.info(f"🔍 结果概要: {str(analysis_result_raw)[:200]}...")
+
+        # 强制刷新日志
+        sys.stdout.flush()
+        sys.stderr.flush()
         
         # 更新进度：生成报告
         await update_analysis_progress(

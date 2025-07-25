@@ -63,7 +63,10 @@ class IndependentAnalyzer:
     async def _get_stock_data(self, symbol: str, trade_date: str = None) -> Optional[Dict]:
         """通过Data Service获取股票数据"""
         try:
-            async with aiohttp.ClientSession() as session:
+            # 创建连接器以避免警告
+            connector = aiohttp.TCPConnector(limit=10, limit_per_host=5)
+            timeout = aiohttp.ClientTimeout(total=60)
+            async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
                 # 计算日期范围
                 if trade_date:
                     end_date = trade_date
@@ -84,7 +87,7 @@ class IndependentAnalyzer:
                     "force_refresh": "true"  # 转换为字符串
                 }
                 
-                async with session.get(url, params=params, timeout=60) as response:
+                async with session.get(url, params=params) as response:
                     if response.status == 200:
                         data = await response.json()
                         if data.get("success"):

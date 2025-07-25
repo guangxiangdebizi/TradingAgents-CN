@@ -77,29 +77,7 @@ services:
     networks:
       - tradingagents-network
 
-  agent-service:
-    build:
-      context: .
-      dockerfile: agent-service/Dockerfile
-    container_name: tradingagents-agent-service
-    ports:
-      - "8008:8008"
-    environment:
-      - DATA_SERVICE_URL=http://data-service:8002
-      - LLM_SERVICE_URL=http://llm-service:8004
-      - MONGODB_URL=mongodb://admin:password123@mongodb:27017/tradingagents?authSource=admin
-      - REDIS_URL=redis://redis:6379/0
-      - PYTHONPATH=/app
-    depends_on:
-      - redis
-      - mongodb
-      - data-service
-      - llm-service
-    volumes:
-      - ../:/app
-    restart: unless-stopped
-    networks:
-      - tradingagents-network
+# agent-service已移除，智能体现在直接集成在analysis-engine中
 
   analysis-engine:
     build:
@@ -111,14 +89,12 @@ services:
     environment:
       - DATA_SERVICE_URL=http://data-service:8002
       - LLM_SERVICE_URL=http://llm-service:8004
-      - AGENT_SERVICE_URL=http://agent-service:8008
       - MONGODB_URL=mongodb://admin:password123@mongodb:27017/tradingagents?authSource=admin
       - REDIS_URL=redis://redis:6379/0
       - PYTHONPATH=/app
     depends_on:
       - data-service
       - llm-service
-      - agent-service
     volumes:
       - ../:/app
     restart: unless-stopped
